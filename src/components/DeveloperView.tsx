@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Code, GitPullRequest, Users, GitBranch, ArrowLeft } from '@phosphor-icons/react'
 import type { Developer, DeveloperMetrics, DeveloperTaskMetrics, SharePointTask } from '@/lib/types'
 import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
 
 interface DeveloperViewProps {
   developer: Developer
@@ -22,7 +23,24 @@ interface DeveloperViewProps {
 }
 
 export function DeveloperView({ developer, metrics, taskMetrics, tasks, developers, onBack }: DeveloperViewProps) {
-  const maxWeekdayCommits = Math.max(...metrics.weekdayActivity.map(d => d.commits))
+  const [apiMetrics, setApiMetrics] = useState<any>(null)
+  
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch(`http://localhost:3001/api/developers/${encodeURIComponent(developer.id)}/metrics`)
+        const data = await res.json()
+        setApiMetrics(data)
+      } catch (err) {
+        console.error('Failed to fetch developer metrics:', err)
+      }
+    }
+    fetchMetrics()
+  }, [developer.id])
+
+  const maxWeekdayCommits = metrics.weekdayActivity?.length > 0 
+    ? Math.max(...metrics.weekdayActivity.map(d => d.commits))
+    : 1
 
   return (
     <div className="space-y-6">
@@ -72,25 +90,25 @@ export function DeveloperView({ developer, metrics, taskMetrics, tasks, develope
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Total Commits"
-          value={metrics.totalCommits.toLocaleString()}
+          value={(apiMetrics?.totalCommits || metrics.totalCommits).toLocaleString()}
           icon={<Code size={20} />}
           delay={0.1}
         />
         <MetricCard
           title="Pull Requests"
-          value={metrics.pullRequests.toLocaleString()}
+          value={(apiMetrics?.pullRequests || metrics.pullRequests).toLocaleString()}
           icon={<GitPullRequest size={20} />}
           delay={0.2}
         />
         <MetricCard
           title="Reviews Given"
-          value={metrics.reviewsGiven.toLocaleString()}
+          value={(apiMetrics?.reviewsGiven || metrics.reviewsGiven).toLocaleString()}
           icon={<Users size={20} />}
           delay={0.3}
         />
         <MetricCard
           title="Active Repos"
-          value={metrics.activeRepos}
+          value={apiMetrics?.activeRepos || metrics.activeRepos}
           icon={<GitBranch size={20} />}
           delay={0.4}
         />

@@ -2,18 +2,52 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
-import { GitBranch } from '@phosphor-icons/react'
+import { GitBranch, GitMerge } from '@phosphor-icons/react'
 import type { Repository, Developer } from '@/lib/types'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ChevronDown } from '@phosphor-icons/react'
 
 interface RepositoriesViewProps {
   repositories: Repository[]
   developers: Developer[]
 }
 
+interface Branch {
+  name: string
+  isDefault: boolean
+  lastCommitDate: string | null
+  commitCount: number
+}
+
 export function RepositoriesView({ repositories, developers }: RepositoriesViewProps) {
   const [sortBy, setSortBy] = useState<'commits' | 'health' | 'activity'>('commits')
+  const [branches, setBranches] = useState<Record<string, Branch[]>>({})
+  const [loadingBranches, setLoadingBranches] = useState<Record<string, boolean>>({})
+  const [openBranches, setOpenBranches] = useState<Record<string, boolean>>({})
+
+  const fetchBranches = async (repoId: string) => {
+    if (branches[repoId] || loadingBranches[repoId]) return
+    
+    setLoadingBranches(prev => ({ ...prev, [repoId]: true }))
+    try {
+      const response = await fetch(`http://localhost:3001/api/repositories/${encodeURIComponent(repoId)}/branches`)
+      const data = await response.json()
+      setBranches(prev => ({ ...prev, [repoId]: data }))
+    } catch (error) {
+      console.error('Failed to fetch branches:', error)
+    } finally {
+      setLoadingBranches(prev => ({ ...prev, [repoId]: false }))
+    }
+  }
+
+  const toggleBranches = (repoId: string) => {
+    setOpenBranches(prev => ({ ...prev, [repoId]: !prev[repoId] }))
+    if (!branches[repoId]) {
+      fetchBranches(repoId)
+    }
+  }
 
   const sortedRepos = [...repositories].sort((a, b) => {
     if (sortBy === 'commits') return b.totalCommits - a.totalCommits
@@ -36,16 +70,24 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
   }
 
   const getTimeAgo = (date: string) => {
-    const now = new Date()
     const past = new Date(date)
+    const now = new Date()
     const diffMs = now.getTime() - past.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
     
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return `${diffDays} days ago`
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-    return `${Math.floor(diffDays / 30)} months ago`
+    // Show actual date for clarity
+    const formatted = past.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    })
+    
+    if (diffDays === 0) return `Today (${formatted})`
+    if (diffDays === 1) return `Yesterday (${formatted})`
+    if (diffDays < 7) return `${diffDays} days ago (${formatted})`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago (${formatted})`
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago (${formatted})`
+    return formatted
   }
 
   return (
@@ -156,6 +198,48 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
                       })}
                     </div>
                   </div>
+
+                  <Collapsible open={openBranches[repo.id]} onOpenChange={() => toggleBranches(repo.id)}>
+                    <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors">
+                      <GitMerge size={16} />
+                      <span>Branch Analytics ({branches[repo.id]?.length || '?'})</span>
+                      <ChevronDown 
+                        size={16} 
+                        className={`transition-transform ${openBranches[repo.id] ? 'rotate-180' : ''}`}
+                      />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-3 space-y-2">
+                        {loadingBranches[repo.id] && (
+                          <div className="text-sm text-muted-foreground">Loading branches...</div>
+                        )}
+                        {branches[repo.id]?.map(branch => (
+                          <div 
+                            key={branch.name} 
+                            className="flex items-center justify-between p-2 rounded bg-muted/50 hover:bg-muted transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <GitBranch size={14} className={branch.isDefault ? 'text-primary' : 'text-muted-foreground'} />
+                              <span className="text-sm font-mono">{branch.name}</span>
+                              {branch.isDefault && (
+                                <Badge variant="default" className="text-xs">default</Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {branch.lastCommitDate ? new Date(branch.lastCommitDate).toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric' 
+                              }) : 'No commits'}
+                            </div>
+                          </div>
+                        ))}
+                        {branches[repo.id]?.length === 0 && (
+                          <div className="text-sm text-muted-foreground">No branches found</div>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 </div>
               </CardContent>
             </Card>

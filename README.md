@@ -21,3 +21,27 @@ No problem! If you were just checking things out and don’t need to keep this c
 📄 License For Spark Template Resources 
 
 The Spark Template files and resources from GitHub are licensed under the terms of the MIT license, Copyright GitHub, Inc.
+
+## SCM Integration (Repositories)
+
+This app can load repositories from your internal SCM API.
+
+- Configure environment variables by copying `.env.example` to `.env.local` and filling values:
+
+```
+VITE_SCM_BASE_URL=http://172.31.200.215:8080
+# Prefer a token when available
+VITE_SCM_TOKEN=YOUR_TOKEN
+# Or use basic auth (not both)
+VITE_SCM_USERNAME=YOUR_USER
+VITE_SCM_PASSWORD=YOUR_PASSWORD
+```
+
+- Start the app:
+
+```
+npm install
+npm run dev
+```
+
+If the SCM API is unreachable or misconfigured, the app falls back to mock repository data.

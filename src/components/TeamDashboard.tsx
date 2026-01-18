@@ -27,7 +27,7 @@ export function TeamDashboard({ teamMetrics, teamTaskMetrics, developers, devMet
   const topContributors = developers
     .map(dev => ({
       ...dev,
-      commits: devMetrics.get(dev.id)?.totalCommits || 0,
+      commits: dev.totalCommits || 0,
     }))
     .sort((a, b) => b.commits - a.commits)
     .slice(0, 5)
