@@ -130,6 +130,8 @@ function App() {
                 developer={selectedDeveloper}
                 metrics={selectedMetrics}
                 taskMetrics={selectedTaskMetrics}
+                tasks={sharePointTasks}
+                developers={developers}
                 onBack={handleBackToTeam}
               />
             ) : (

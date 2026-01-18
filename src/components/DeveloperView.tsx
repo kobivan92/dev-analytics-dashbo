@@ -3,22 +3,25 @@ import { CommitChart } from '@/components/CommitChart'
 import { LanguageChart } from '@/components/LanguageChart'
 import { TaskMetrics } from '@/components/TaskMetrics'
 import { TaskCompletionChart } from '@/components/TaskCompletionChart'
+import { DeveloperTaskDrilldown } from '@/components/DeveloperTaskDrilldown'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Code, GitPullRequest, Users, GitBranch, ArrowLeft } from '@phosphor-icons/react'
-import type { Developer, DeveloperMetrics, DeveloperTaskMetrics } from '@/lib/types'
+import type { Developer, DeveloperMetrics, DeveloperTaskMetrics, SharePointTask } from '@/lib/types'
 import { motion } from 'framer-motion'
 
 interface DeveloperViewProps {
   developer: Developer
   metrics: DeveloperMetrics
   taskMetrics: DeveloperTaskMetrics
+  tasks: SharePointTask[]
+  developers: Developer[]
   onBack: () => void
 }
 
-export function DeveloperView({ developer, metrics, taskMetrics, onBack }: DeveloperViewProps) {
+export function DeveloperView({ developer, metrics, taskMetrics, tasks, developers, onBack }: DeveloperViewProps) {
   const maxWeekdayCommits = Math.max(...metrics.weekdayActivity.map(d => d.commits))
 
   return (
@@ -218,6 +221,18 @@ export function DeveloperView({ developer, metrics, taskMetrics, onBack }: Devel
           data={taskMetrics.tasksOverTime}
           title="Task Resolution Timeline"
           description="Tasks resolved over time period"
+        />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 1.2 }}
+      >
+        <DeveloperTaskDrilldown
+          tasks={tasks}
+          developerId={developer.id}
+          developers={developers}
         />
       </motion.div>
     </div>
