@@ -217,9 +217,10 @@ export function generateSharePointTasks(developers: Developer[], days: number = 
   const tasks: SharePointTask[] = []
   const now = new Date()
   
-  const taskCount = 80 + Math.floor(Math.random() * 40)
+  const resolvedTaskCount = 80 + Math.floor(Math.random() * 40)
+  const activeTaskCount = 20 + Math.floor(Math.random() * 30)
   
-  for (let i = 0; i < taskCount; i++) {
+  for (let i = 0; i < resolvedTaskCount; i++) {
     const assignedDev = developers[Math.floor(Math.random() * developers.length)]
     const createdByDev = developers[Math.floor(Math.random() * developers.length)]
     
@@ -247,8 +248,8 @@ export function generateSharePointTasks(developers: Developer[], days: number = 
       }
     }
     
-    const statuses: TaskStatus[] = ['Resolved', 'Closed', 'Completed']
-    const status = statuses[Math.floor(Math.random() * statuses.length)]
+    const resolvedStatuses: TaskStatus[] = ['Resolved', 'Closed', 'Completed']
+    const status = resolvedStatuses[Math.floor(Math.random() * resolvedStatuses.length)]
     
     const category = TASK_CATEGORIES[Math.floor(Math.random() * TASK_CATEGORIES.length)]
     const title = TASK_TITLES[Math.floor(Math.random() * TASK_TITLES.length)]
@@ -275,9 +276,79 @@ export function generateSharePointTasks(developers: Developer[], days: number = 
     })
   }
   
-  return tasks.sort((a, b) => 
-    new Date(b.resolvedDate).getTime() - new Date(a.resolvedDate).getTime()
-  )
+  for (let i = 0; i < activeTaskCount; i++) {
+    const assignedDev = developers[Math.floor(Math.random() * developers.length)]
+    const createdByDev = developers[Math.floor(Math.random() * developers.length)]
+    
+    const createdDaysAgo = Math.floor(Math.random() * 30)
+    const createdDate = new Date(now)
+    createdDate.setDate(createdDate.getDate() - createdDaysAgo)
+    
+    const daysUntilDue = 1 + Math.floor(Math.random() * 20)
+    const dueDate = new Date(now)
+    dueDate.setDate(dueDate.getDate() + daysUntilDue)
+    
+    const priorities: TaskPriority[] = ['Low', 'Normal', 'High', 'Critical']
+    const priorityWeights = [0.15, 0.45, 0.3, 0.1]
+    const rand = Math.random()
+    let cumulative = 0
+    let priority: TaskPriority = 'Normal'
+    for (let j = 0; j < priorities.length; j++) {
+      cumulative += priorityWeights[j]
+      if (rand <= cumulative) {
+        priority = priorities[j]
+        break
+      }
+    }
+    
+    const activeStatuses: TaskStatus[] = ['Active', 'In Progress', 'Blocked', 'Under Review']
+    const statusWeights = [0.3, 0.5, 0.1, 0.1]
+    const statusRand = Math.random()
+    let statusCumulative = 0
+    let status: TaskStatus = 'Active'
+    for (let j = 0; j < activeStatuses.length; j++) {
+      statusCumulative += statusWeights[j]
+      if (statusRand <= statusCumulative) {
+        status = activeStatuses[j]
+        break
+      }
+    }
+    
+    const category = TASK_CATEGORIES[Math.floor(Math.random() * TASK_CATEGORIES.length)]
+    const title = TASK_TITLES[Math.floor(Math.random() * TASK_TITLES.length)]
+    const tags = TASK_TAGS[Math.floor(Math.random() * TASK_TAGS.length)]
+    
+    const estimatedHours = 1 + Math.floor(Math.random() * 16)
+    const actualHours = status === 'In Progress' || status === 'Under Review'
+      ? estimatedHours * (0.2 + Math.random() * 0.6)
+      : 0
+    
+    tasks.push({
+      id: `task-${resolvedTaskCount + i + 1}`,
+      title,
+      description: `Task description for ${title}`,
+      assignedTo: assignedDev.id,
+      createdBy: createdByDev.id,
+      priority,
+      status,
+      createdDate: createdDate.toISOString(),
+      resolvedDate: undefined,
+      dueDate: dueDate.toISOString(),
+      category,
+      estimatedHours,
+      actualHours: Math.round(actualHours * 10) / 10,
+      tags,
+    })
+  }
+  
+  return tasks.sort((a, b) => {
+    if (!a.resolvedDate && b.resolvedDate) return -1
+    if (a.resolvedDate && !b.resolvedDate) return 1
+    if (!a.resolvedDate && !b.resolvedDate) {
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+    }
+    return new Date(b.resolvedDate!).getTime() - new Date(a.resolvedDate!).getTime()
+  })
 }
 
 export function generateDeveloperTaskMetrics(
@@ -287,11 +358,15 @@ export function generateDeveloperTaskMetrics(
 ): DeveloperTaskMetrics {
   const devTasks = tasks.filter(t => t.assignedTo === developerId)
   
-  const totalTasksResolved = devTasks.length
+  const resolvedTasks = devTasks.filter(t => t.resolvedDate)
+  const activeTasks = devTasks.filter(t => !t.resolvedDate)
   
-  const resolutionTimes = devTasks.map(task => {
+  const totalTasksActive = activeTasks.length
+  const totalTasksResolved = resolvedTasks.length
+  
+  const resolutionTimes = resolvedTasks.map(task => {
     const created = new Date(task.createdDate).getTime()
-    const resolved = new Date(task.resolvedDate).getTime()
+    const resolved = new Date(task.resolvedDate!).getTime()
     return (resolved - created) / (1000 * 60 * 60 * 24)
   })
   const avgResolutionTime = resolutionTimes.length > 0
@@ -317,22 +392,23 @@ export function generateDeveloperTaskMetrics(
     date.setDate(date.getDate() - i)
     const dateStr = date.toISOString().split('T')[0]
     
-    const count = devTasks.filter(task => {
-      const resolvedDate = task.resolvedDate.split('T')[0]
+    const count = resolvedTasks.filter(task => {
+      const resolvedDate = task.resolvedDate!.split('T')[0]
       return resolvedDate === dateStr
     }).length
     
     tasksOverTime.push({ date: dateStr, count })
   }
   
-  const totalEstimated = devTasks.reduce((sum, t) => sum + t.estimatedHours, 0)
-  const totalActual = devTasks.reduce((sum, t) => sum + t.actualHours, 0)
+  const totalEstimated = resolvedTasks.reduce((sum, t) => sum + t.estimatedHours, 0)
+  const totalActual = resolvedTasks.reduce((sum, t) => sum + t.actualHours, 0)
   const estimateAccuracy = totalEstimated > 0 
     ? Math.round((1 - Math.abs(totalActual - totalEstimated) / totalEstimated) * 100)
     : 100
   
   return {
     developerId,
+    totalTasksActive,
     totalTasksResolved,
     avgResolutionTime: Math.round(avgResolutionTime * 10) / 10,
     tasksByPriority,
@@ -347,11 +423,15 @@ export function generateTeamTaskMetrics(
   developers: Developer[],
   days: number = 90
 ): TeamTaskMetrics {
-  const totalTasksResolved = tasks.length
+  const resolvedTasks = tasks.filter(t => t.resolvedDate)
+  const activeTasks = tasks.filter(t => !t.resolvedDate)
   
-  const resolutionTimes = tasks.map(task => {
+  const totalTasksActive = activeTasks.length
+  const totalTasksResolved = resolvedTasks.length
+  
+  const resolutionTimes = resolvedTasks.map(task => {
     const created = new Date(task.createdDate).getTime()
-    const resolved = new Date(task.resolvedDate).getTime()
+    const resolved = new Date(task.resolvedDate!).getTime()
     return (resolved - created) / (1000 * 60 * 60 * 24)
   })
   const avgResolutionTime = resolutionTimes.length > 0
@@ -374,8 +454,8 @@ export function generateTeamTaskMetrics(
     date.setDate(date.getDate() - i)
     const dateStr = date.toISOString().split('T')[0]
     
-    const count = tasks.filter(task => {
-      const resolvedDate = task.resolvedDate.split('T')[0]
+    const count = resolvedTasks.filter(task => {
+      const resolvedDate = task.resolvedDate!.split('T')[0]
       return resolvedDate === dateStr
     }).length
     
@@ -384,10 +464,11 @@ export function generateTeamTaskMetrics(
   
   const topPerformers = developers.map(dev => ({
     developerId: dev.id,
-    tasksResolved: tasks.filter(t => t.assignedTo === dev.id).length,
+    tasksResolved: resolvedTasks.filter(t => t.assignedTo === dev.id).length,
   })).sort((a, b) => b.tasksResolved - a.tasksResolved).slice(0, 5)
   
   return {
+    totalTasksActive,
     totalTasksResolved,
     avgResolutionTime: Math.round(avgResolutionTime * 10) / 10,
     totalEstimatedHours,

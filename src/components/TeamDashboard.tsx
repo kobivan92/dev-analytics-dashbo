@@ -4,7 +4,7 @@ import { TaskCompletionChart } from '@/components/TaskCompletionChart'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Code, Users, GitPullRequest, GitBranch, CheckCircle, Clock, Target } from '@phosphor-icons/react'
+import { Code, Users, GitPullRequest, GitBranch, CheckCircle, Clock, Target, Hourglass } from '@phosphor-icons/react'
 import type { TeamMetrics, Developer, DeveloperMetrics, TeamTaskMetrics, TaskPriority } from '@/lib/types'
 import { motion } from 'framer-motion'
 
@@ -101,21 +101,21 @@ export function TeamDashboard({ teamMetrics, teamTaskMetrics, developers, devMet
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
+          title="Active Tasks"
+          value={teamTaskMetrics.totalTasksActive.toLocaleString()}
+          icon={<Hourglass size={20} />}
+          delay={0.6}
+        />
+        <MetricCard
           title="Tasks Resolved"
           value={teamTaskMetrics.totalTasksResolved.toLocaleString()}
           icon={<CheckCircle size={20} />}
-          delay={0.6}
+          delay={0.7}
         />
         <MetricCard
           title="Avg Resolution Time"
           value={`${teamTaskMetrics.avgResolutionTime}d`}
           icon={<Clock size={20} />}
-          delay={0.7}
-        />
-        <MetricCard
-          title="Total Hours"
-          value={teamTaskMetrics.totalActualHours.toLocaleString()}
-          icon={<Target size={20} />}
           delay={0.8}
         />
         <MetricCard

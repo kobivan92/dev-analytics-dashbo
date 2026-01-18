@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { DeveloperTaskMetrics, TaskPriority } from '@/lib/types'
-import { CheckCircle, Clock, Target, TrendUp } from '@phosphor-icons/react'
+import { CheckCircle, Clock, Target, TrendUp, Hourglass } from '@phosphor-icons/react'
 
 interface TaskMetricsProps {
   metrics: DeveloperTaskMetrics
@@ -15,9 +15,25 @@ const priorityColors: Record<TaskPriority, string> = {
 }
 
 export function TaskMetrics({ metrics }: TaskMetricsProps) {
+  const totalTasks = metrics.totalTasksActive + metrics.totalTasksResolved
+  
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                <Hourglass size={20} className="text-blue-600" weight="bold" />
+              </div>
+              <CardTitle className="text-sm font-medium">Active Tasks</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{metrics.totalTasksActive}</div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
@@ -60,20 +76,6 @@ export function TaskMetrics({ metrics }: TaskMetricsProps) {
             <div className="text-3xl font-bold">{metrics.estimateAccuracy}%</div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-accent/20 rounded-lg">
-                <TrendUp size={20} className="text-accent" weight="bold" />
-              </div>
-              <CardTitle className="text-sm font-medium">Categories</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{metrics.tasksByCategory.length}</div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -96,7 +98,7 @@ export function TaskMetrics({ metrics }: TaskMetricsProps) {
                       <div
                         className="h-full bg-accent transition-all"
                         style={{
-                          width: `${(count / metrics.totalTasksResolved) * 100}%`,
+                          width: `${totalTasks > 0 ? (count / totalTasks) * 100 : 0}%`,
                         }}
                       />
                     </div>
@@ -123,7 +125,7 @@ export function TaskMetrics({ metrics }: TaskMetricsProps) {
                       <div
                         className="h-full bg-primary transition-all"
                         style={{
-                          width: `${(count / metrics.totalTasksResolved) * 100}%`,
+                          width: `${totalTasks > 0 ? (count / totalTasks) * 100 : 0}%`,
                         }}
                       />
                     </div>
