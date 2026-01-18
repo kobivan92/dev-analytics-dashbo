@@ -1,6 +1,6 @@
 import { MetricCard } from '@/components/MetricCard'
 import { CommitChart } from '@/components/CommitChart'
-import { LanguageChart } from '@/components/LanguageChart'
+import { ActivityHeatmap } from '@/components/ActivityHeatmap'
 import { TaskMetrics } from '@/components/TaskMetrics'
 import { TaskCompletionChart } from '@/components/TaskCompletionChart'
 import { DeveloperTaskDrilldown } from '@/components/DeveloperTaskDrilldown'
@@ -137,10 +137,14 @@ export function DeveloperView({ developer, metrics, taskMetrics, tasks, develope
         >
           <Card>
             <CardHeader>
-              <CardTitle>Language Breakdown</CardTitle>
+              <CardTitle>Contribution Heatmap (Last Year)</CardTitle>
             </CardHeader>
             <CardContent>
-              <LanguageChart data={metrics.languageBreakdown} size={200} />
+              <ActivityHeatmap 
+                data={(apiMetrics?.commitHistory || []).map((d: any) => ({ date: d.date, count: d.commits }))}
+                weeks={53}
+                size={10}
+              />
             </CardContent>
           </Card>
         </motion.div>

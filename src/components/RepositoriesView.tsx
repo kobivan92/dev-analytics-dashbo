@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown } from '@phosphor-icons/react'
+import { ActivityHeatmap } from '@/components/ActivityHeatmap'
 
 interface RepositoriesViewProps {
   repositories: Repository[]
@@ -26,6 +27,9 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
   const [branches, setBranches] = useState<Record<string, Branch[]>>({})
   const [loadingBranches, setLoadingBranches] = useState<Record<string, boolean>>({})
   const [openBranches, setOpenBranches] = useState<Record<string, boolean>>({})
+
+  type DayCount = { date: string; commits: number }
+  const [repoActivity, setRepoActivity] = useState<Record<string, DayCount[]>>({})
 
   const fetchBranches = async (repoId: string) => {
     if (branches[repoId] || loadingBranches[repoId]) return
@@ -62,6 +66,22 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
     if (score >= 60) return 'text-yellow-600'
     return 'text-red-600'
   }
+
+  useEffect(() => {
+    // Lazy fetch activity per repo once when repositories change
+    const fetchActivity = async (repoId: string) => {
+      if (repoActivity[repoId]) return
+      try {
+        const res = await fetch(`http://localhost:3001/api/repositories/${encodeURIComponent(repoId)}/activity`)
+        const data = await res.json()
+        setRepoActivity(prev => ({ ...prev, [repoId]: data }))
+      } catch (e) {
+        console.warn('Failed to load repo activity', repoId, e)
+      }
+    }
+    repositories.forEach(r => fetchActivity(r.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repositories])
 
   const getHealthBgColor = (score: number) => {
     if (score >= 80) return 'bg-green-100'
@@ -170,6 +190,15 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
                   <div>
                     <div className="text-sm font-medium mb-2">Repository Health</div>
                     <Progress value={repo.healthScore} className="h-2" />
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-medium mb-2">Activity (Last Year)</div>
+                    <ActivityHeatmap 
+                      data={(repoActivity[repo.id] || []).map(d => ({ date: d.date, count: d.commits }))}
+                      weeks={26}
+                      size={8}
+                    />
                   </div>
 
                   <div>

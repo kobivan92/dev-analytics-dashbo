@@ -254,6 +254,36 @@ app.get('/api/repositories/:id/branches', (req, res) => {
   }
 })
 
+// Get daily commit activity for a repository (last 365 days)
+app.get('/api/repositories/:id/activity', (req, res) => {
+  try {
+    const db = getDatabase()
+    const { id } = req.params
+    
+    const activityResult = db.exec(`
+      SELECT date(c.timestamp) as date, COUNT(*) as commits
+      FROM repo_commits rc
+      JOIN commits c ON rc.commit_hash = c.hash
+      WHERE rc.repo_id = ?
+        AND date(c.timestamp) >= date('now', '-365 day')
+      GROUP BY date(c.timestamp)
+      ORDER BY date(c.timestamp)
+    `, [id])
+    
+    const activity = activityResult[0]
+      ? activityResult[0].values.map((r: any) => ({
+          date: r[0],
+          commits: r[1],
+        }))
+      : []
+    
+    res.json(activity)
+  } catch (error: any) {
+    console.error('Failed to fetch repo activity:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`API server listening on http://localhost:${PORT}`)
 })
