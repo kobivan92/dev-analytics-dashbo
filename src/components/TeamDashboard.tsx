@@ -1,19 +1,29 @@
 import { MetricCard } from '@/components/MetricCard'
 import { CommitChart } from '@/components/CommitChart'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { TaskCompletionChart } from '@/components/TaskCompletionChart'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Code, Users, GitPullRequest, GitBranch } from '@phosphor-icons/react'
-import type { TeamMetrics, Developer, DeveloperMetrics } from '@/lib/types'
+import { Badge } from '@/components/ui/badge'
+import { Code, Users, GitPullRequest, GitBranch, CheckCircle, Clock, Target } from '@phosphor-icons/react'
+import type { TeamMetrics, Developer, DeveloperMetrics, TeamTaskMetrics, TaskPriority } from '@/lib/types'
 import { motion } from 'framer-motion'
 
 interface TeamDashboardProps {
   teamMetrics: TeamMetrics
+  teamTaskMetrics: TeamTaskMetrics
   developers: Developer[]
   devMetrics: Map<string, DeveloperMetrics>
   onSelectDeveloper: (devId: string) => void
 }
 
-export function TeamDashboard({ teamMetrics, developers, devMetrics, onSelectDeveloper }: TeamDashboardProps) {
+const priorityColors: Record<TaskPriority, string> = {
+  Low: 'bg-blue-500/10 text-blue-700 border-blue-200',
+  Normal: 'bg-slate-500/10 text-slate-700 border-slate-200',
+  High: 'bg-orange-500/10 text-orange-700 border-orange-200',
+  Critical: 'bg-red-500/10 text-red-700 border-red-200',
+}
+
+export function TeamDashboard({ teamMetrics, teamTaskMetrics, developers, devMetrics, onSelectDeveloper }: TeamDashboardProps) {
   const topContributors = developers
     .map(dev => ({
       ...dev,
@@ -22,8 +32,20 @@ export function TeamDashboard({ teamMetrics, developers, devMetrics, onSelectDev
     .sort((a, b) => b.commits - a.commits)
     .slice(0, 5)
 
+  const efficiencyPercentage = teamTaskMetrics.totalEstimatedHours > 0
+    ? Math.round((teamTaskMetrics.totalActualHours / teamTaskMetrics.totalEstimatedHours) * 100)
+    : 100
+
   return (
     <div className="space-y-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <h2 className="text-2xl font-bold mb-4">Git Repository Metrics</h2>
+      </motion.div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Total Commits"
@@ -73,6 +95,92 @@ export function TeamDashboard({ teamMetrics, developers, devMetrics, onSelectDev
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.5 }}
+      >
+        <h2 className="text-2xl font-bold mb-4">SharePoint Task Metrics</h2>
+      </motion.div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Tasks Resolved"
+          value={teamTaskMetrics.totalTasksResolved.toLocaleString()}
+          icon={<CheckCircle size={20} />}
+          delay={0.6}
+        />
+        <MetricCard
+          title="Avg Resolution Time"
+          value={`${teamTaskMetrics.avgResolutionTime}d`}
+          icon={<Clock size={20} />}
+          delay={0.7}
+        />
+        <MetricCard
+          title="Total Hours"
+          value={teamTaskMetrics.totalActualHours.toLocaleString()}
+          icon={<Target size={20} />}
+          delay={0.8}
+        />
+        <MetricCard
+          title="Efficiency"
+          value={`${efficiencyPercentage}%`}
+          icon={<Target size={20} />}
+          delay={0.9}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 1.0 }}
+        >
+          <TaskCompletionChart 
+            data={teamTaskMetrics.taskCompletionTrend}
+            title="Task Completion Trend"
+            description="Tasks resolved over time"
+          />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 1.1 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Tasks by Priority</CardTitle>
+              <CardDescription>Distribution across priority levels</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {teamTaskMetrics.tasksByPriority.map(({ priority, count }) => (
+                  <div key={priority} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={priorityColors[priority]}>
+                        {priority}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-accent transition-all"
+                          style={{
+                            width: `${(count / teamTaskMetrics.totalTasksResolved) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm font-semibold w-12 text-right">{count}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 1.2 }}
       >
         <Card>
           <CardHeader>

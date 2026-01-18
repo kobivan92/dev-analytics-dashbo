@@ -4,8 +4,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TeamDashboard } from '@/components/TeamDashboard'
 import { DeveloperView } from '@/components/DeveloperView'
 import { RepositoriesView } from '@/components/RepositoriesView'
-import { generateDevelopers, generateDeveloperMetrics, generateRepositories, generateTeamMetrics } from '@/lib/mockData'
-import { ChartBar, User, GitBranch } from '@phosphor-icons/react'
+import { TasksView } from '@/components/TasksView'
+import { 
+  generateDevelopers, 
+  generateDeveloperMetrics, 
+  generateRepositories, 
+  generateTeamMetrics,
+  generateSharePointTasks,
+  generateDeveloperTaskMetrics,
+  generateTeamTaskMetrics
+} from '@/lib/mockData'
+import { ChartBar, User, GitBranch, CheckCircle } from '@phosphor-icons/react'
 import type { Developer, DeveloperMetrics, Repository } from '@/lib/types'
 
 function App() {
@@ -28,6 +37,24 @@ function App() {
     [developers, devMetrics]
   )
 
+  const sharePointTasks = useMemo(() => 
+    generateSharePointTasks(developers), 
+    [developers]
+  )
+
+  const devTaskMetrics = useMemo(() => {
+    const metrics = new Map()
+    developers.forEach(dev => {
+      metrics.set(dev.id, generateDeveloperTaskMetrics(dev.id, sharePointTasks))
+    })
+    return metrics
+  }, [developers, sharePointTasks])
+
+  const teamTaskMetrics = useMemo(() => 
+    generateTeamTaskMetrics(sharePointTasks, developers),
+    [sharePointTasks, developers]
+  )
+
   const handleSelectDeveloper = (devId: string) => {
     setSelectedDevId(devId)
     setActiveTab('individual')
@@ -44,6 +71,10 @@ function App() {
 
   const selectedMetrics = selectedDevId 
     ? devMetrics.get(selectedDevId) 
+    : null
+
+  const selectedTaskMetrics = selectedDevId
+    ? devTaskMetrics.get(selectedDevId)
     : null
 
   return (
@@ -64,7 +95,7 @@ function App() {
 
       <main className="container mx-auto px-4 md:px-6 py-6">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value)}>
-          <TabsList className="grid w-full max-w-md grid-cols-3 mb-6">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-6">
             <TabsTrigger value="team" className="gap-2">
               <ChartBar size={16} />
               Team
@@ -77,11 +108,16 @@ function App() {
               <GitBranch size={16} />
               Repositories
             </TabsTrigger>
+            <TabsTrigger value="tasks" className="gap-2">
+              <CheckCircle size={16} />
+              Tasks
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="team">
             <TeamDashboard
               teamMetrics={teamMetrics}
+              teamTaskMetrics={teamTaskMetrics}
               developers={developers}
               devMetrics={devMetrics}
               onSelectDeveloper={handleSelectDeveloper}
@@ -89,10 +125,11 @@ function App() {
           </TabsContent>
 
           <TabsContent value="individual">
-            {selectedDeveloper && selectedMetrics ? (
+            {selectedDeveloper && selectedMetrics && selectedTaskMetrics ? (
               <DeveloperView
                 developer={selectedDeveloper}
                 metrics={selectedMetrics}
+                taskMetrics={selectedTaskMetrics}
                 onBack={handleBackToTeam}
               />
             ) : (
@@ -108,6 +145,10 @@ function App() {
 
           <TabsContent value="repositories">
             <RepositoriesView repositories={repositories} developers={developers} />
+          </TabsContent>
+
+          <TabsContent value="tasks">
+            <TasksView tasks={sharePointTasks} developers={developers} />
           </TabsContent>
         </Tabs>
       </main>

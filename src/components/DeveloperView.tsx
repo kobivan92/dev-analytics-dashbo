@@ -1,21 +1,24 @@
 import { MetricCard } from '@/components/MetricCard'
 import { CommitChart } from '@/components/CommitChart'
 import { LanguageChart } from '@/components/LanguageChart'
+import { TaskMetrics } from '@/components/TaskMetrics'
+import { TaskCompletionChart } from '@/components/TaskCompletionChart'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Code, GitPullRequest, Users, GitBranch, ArrowLeft } from '@phosphor-icons/react'
-import type { Developer, DeveloperMetrics } from '@/lib/types'
+import type { Developer, DeveloperMetrics, DeveloperTaskMetrics } from '@/lib/types'
 import { motion } from 'framer-motion'
 
 interface DeveloperViewProps {
   developer: Developer
   metrics: DeveloperMetrics
+  taskMetrics: DeveloperTaskMetrics
   onBack: () => void
 }
 
-export function DeveloperView({ developer, metrics, onBack }: DeveloperViewProps) {
+export function DeveloperView({ developer, metrics, taskMetrics, onBack }: DeveloperViewProps) {
   const maxWeekdayCommits = Math.max(...metrics.weekdayActivity.map(d => d.commits))
 
   return (
@@ -53,6 +56,14 @@ export function DeveloperView({ developer, metrics, onBack }: DeveloperViewProps
             </div>
           </CardContent>
         </Card>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+      >
+        <h3 className="text-xl font-bold mb-4">Git Activity Metrics</h3>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -180,6 +191,34 @@ export function DeveloperView({ developer, metrics, onBack }: DeveloperViewProps
             </div>
           </CardContent>
         </Card>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.9 }}
+      >
+        <h3 className="text-xl font-bold mb-4">SharePoint Task Metrics</h3>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 1.0 }}
+      >
+        <TaskMetrics metrics={taskMetrics} />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 1.1 }}
+      >
+        <TaskCompletionChart 
+          data={taskMetrics.tasksOverTime}
+          title="Task Resolution Timeline"
+          description="Tasks resolved over time period"
+        />
       </motion.div>
     </div>
   )

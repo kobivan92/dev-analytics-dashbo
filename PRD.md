@@ -1,6 +1,6 @@
 # Planning Guide
 
-A developer analytics dashboard that provides insights into individual coder performance and overall team metrics, simulating integration patterns for Git repositories and SharePoint-style collaboration data.
+A developer analytics dashboard that provides insights into individual coder performance and overall team metrics, integrating Git repositories and SharePoint task data to provide comprehensive productivity analytics.
 
 **Experience Qualities**: 
 1. **Data-Driven** - Every metric should feel purposeful and actionable, presenting clear insights at a glance
@@ -8,7 +8,7 @@ A developer analytics dashboard that provides insights into individual coder per
 3. **Comprehensive** - Users should be able to drill down from high-level team views to individual contributor details seamlessly
 
 **Complexity Level**: Complex Application (advanced functionality, likely with multiple views)
-This application requires multiple coordinated views (team overview, individual profiles, repository analytics), persistent state management, data visualization, and sophisticated filtering/sorting capabilities.
+This application requires multiple coordinated views (team overview, individual profiles, repository analytics, task management), persistent state management, data visualization, and sophisticated filtering/sorting capabilities.
 
 ## Essential Features
 
@@ -33,6 +33,27 @@ This application requires multiple coordinated views (team overview, individual 
 - **Progression**: Navigate to repos → List appears with sortable columns → Click repository → Detailed view with contributor breakdown → Filter by date range or activity level
 - **Success criteria**: Repositories are sortable by multiple criteria, contributor breakdown is accurate, activity trends are visible
 
+### SharePoint Resolved Tasks View
+- **Functionality**: Displays all resolved tasks from SharePoint with filtering, search, and detailed task information including assignments, priorities, and completion times
+- **Purpose**: Provides visibility into task completion, helps identify bottlenecks, and tracks individual and team productivity through task management
+- **Trigger**: User navigates to tasks tab
+- **Progression**: Navigate to tasks → Task list appears → Filter by priority/category → Search tasks → View individual task details with metadata
+- **Success criteria**: All resolved tasks are displayed with accurate data, filters work correctly, search is responsive, task details are complete
+
+### Task Metrics Integration
+- **Functionality**: Shows individual developer task completion metrics including resolution times, estimate accuracy, category distribution, and priority handling
+- **Purpose**: Enables performance evaluation based on task completion patterns, helps identify training needs, and celebrates achievements
+- **Trigger**: View individual developer profile
+- **Progression**: Select developer → View combined Git and task metrics → Analyze task completion trends → Compare estimate vs actual hours → Review category distribution
+- **Success criteria**: Task metrics accurately reflect developer performance, charts are interactive, estimate accuracy is calculated correctly
+
+### Team Task Analytics
+- **Functionality**: Aggregates task metrics across the entire team showing total resolved tasks, average resolution times, efficiency metrics, and priority distribution
+- **Purpose**: Provides management with holistic view of team productivity beyond just code metrics
+- **Trigger**: Team dashboard loads automatically
+- **Progression**: Dashboard loads → Team task metrics displayed alongside Git metrics → Task completion trends visible → Priority distribution shown → Top performers highlighted
+- **Success criteria**: Team-level aggregations are accurate, trends are clearly visualized, integration with Git metrics feels cohesive
+
 ### Date Range Filtering
 - **Functionality**: Allows users to scope all analytics to specific time periods (last 7 days, 30 days, 90 days, or custom range)
 - **Purpose**: Enables temporal analysis and trend identification across different time horizons
@@ -53,8 +74,11 @@ This application requires multiple coordinated views (team overview, individual 
 - **Single Developer**: Adjust UI to show that team comparisons aren't meaningful, focus on temporal trends instead
 - **Extreme Values**: Cap chart scales intelligently to prevent outliers from distorting visualization usefulness
 - **Long Repository Names**: Truncate with ellipsis and show full name on hover to maintain layout integrity
+- **Long Task Titles**: Truncate task titles with ellipsis and show full title on hover or in expanded view
 - **Rapid Filter Changes**: Debounce filter applications to prevent performance issues from excessive recalculations
 - **Future Dates**: Prevent selection of date ranges that extend beyond current date
+- **Zero Tasks**: Handle developers with no resolved tasks gracefully with appropriate messaging
+- **Extreme Resolution Times**: Display tasks with unusually long resolution times with special indicators
 
 ## Design Direction
 

@@ -1,4 +1,15 @@
-import type { Developer, DeveloperMetrics, Repository, TeamMetrics, CommitData } from './types'
+import type { 
+  Developer, 
+  DeveloperMetrics, 
+  Repository, 
+  TeamMetrics, 
+  CommitData,
+  SharePointTask,
+  TaskPriority,
+  TaskStatus,
+  DeveloperTaskMetrics,
+  TeamTaskMetrics
+} from './types'
 
 const DEVELOPER_NAMES = [
   { name: 'Sarah Chen', email: 'sarah.chen@company.com', role: 'Senior Developer' },
@@ -22,6 +33,48 @@ const REPOSITORIES = [
 
 const LANGUAGES = ['TypeScript', 'Python', 'JavaScript', 'Go', 'Java', 'Rust', 'Ruby']
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+const TASK_CATEGORIES = [
+  'Bug Fix',
+  'Feature Development',
+  'Code Review',
+  'Documentation',
+  'Testing',
+  'Refactoring',
+  'Performance',
+  'Security',
+  'Infrastructure'
+]
+
+const TASK_TITLES = [
+  'Fix authentication timeout issue',
+  'Implement user profile page',
+  'Update API documentation',
+  'Add unit tests for payment module',
+  'Optimize database queries',
+  'Review pull request #234',
+  'Refactor legacy code in auth service',
+  'Fix memory leak in background worker',
+  'Add error handling to file upload',
+  'Implement dark mode toggle',
+  'Update dependencies to latest versions',
+  'Fix responsive layout on mobile',
+  'Add logging to critical endpoints',
+  'Optimize image loading performance',
+  'Fix race condition in cache layer'
+]
+
+const TASK_TAGS = [
+  ['backend', 'urgent'],
+  ['frontend', 'ui'],
+  ['database', 'optimization'],
+  ['security', 'critical'],
+  ['testing', 'qa'],
+  ['documentation'],
+  ['devops', 'infrastructure'],
+  ['bug', 'hotfix'],
+  ['feature', 'enhancement']
+]
 
 function generateAvatar(name: string): string {
   const initials = name.split(' ').map(n => n[0]).join('')
@@ -157,5 +210,190 @@ export function generateTeamMetrics(
     teamSize: developers.length,
     avgCommitsPerDev: Math.round(totalCommits / developers.length),
     commitTrend,
+  }
+}
+
+export function generateSharePointTasks(developers: Developer[], days: number = 90): SharePointTask[] {
+  const tasks: SharePointTask[] = []
+  const now = new Date()
+  
+  const taskCount = 80 + Math.floor(Math.random() * 40)
+  
+  for (let i = 0; i < taskCount; i++) {
+    const assignedDev = developers[Math.floor(Math.random() * developers.length)]
+    const createdByDev = developers[Math.floor(Math.random() * developers.length)]
+    
+    const createdDaysAgo = Math.floor(Math.random() * days)
+    const createdDate = new Date(now)
+    createdDate.setDate(createdDate.getDate() - createdDaysAgo)
+    
+    const resolutionDays = 1 + Math.floor(Math.random() * 14)
+    const resolvedDate = new Date(createdDate)
+    resolvedDate.setDate(resolvedDate.getDate() + resolutionDays)
+    
+    const dueDate = new Date(createdDate)
+    dueDate.setDate(dueDate.getDate() + resolutionDays + Math.floor(Math.random() * 7) - 3)
+    
+    const priorities: TaskPriority[] = ['Low', 'Normal', 'High', 'Critical']
+    const priorityWeights = [0.2, 0.5, 0.25, 0.05]
+    const rand = Math.random()
+    let cumulative = 0
+    let priority: TaskPriority = 'Normal'
+    for (let j = 0; j < priorities.length; j++) {
+      cumulative += priorityWeights[j]
+      if (rand <= cumulative) {
+        priority = priorities[j]
+        break
+      }
+    }
+    
+    const statuses: TaskStatus[] = ['Resolved', 'Closed', 'Completed']
+    const status = statuses[Math.floor(Math.random() * statuses.length)]
+    
+    const category = TASK_CATEGORIES[Math.floor(Math.random() * TASK_CATEGORIES.length)]
+    const title = TASK_TITLES[Math.floor(Math.random() * TASK_TITLES.length)]
+    const tags = TASK_TAGS[Math.floor(Math.random() * TASK_TAGS.length)]
+    
+    const estimatedHours = 1 + Math.floor(Math.random() * 16)
+    const actualHours = estimatedHours * (0.7 + Math.random() * 0.8)
+    
+    tasks.push({
+      id: `task-${i + 1}`,
+      title,
+      description: `Task description for ${title}`,
+      assignedTo: assignedDev.id,
+      createdBy: createdByDev.id,
+      priority,
+      status,
+      createdDate: createdDate.toISOString(),
+      resolvedDate: resolvedDate.toISOString(),
+      dueDate: dueDate.toISOString(),
+      category,
+      estimatedHours,
+      actualHours: Math.round(actualHours * 10) / 10,
+      tags,
+    })
+  }
+  
+  return tasks.sort((a, b) => 
+    new Date(b.resolvedDate).getTime() - new Date(a.resolvedDate).getTime()
+  )
+}
+
+export function generateDeveloperTaskMetrics(
+  developerId: string,
+  tasks: SharePointTask[],
+  days: number = 90
+): DeveloperTaskMetrics {
+  const devTasks = tasks.filter(t => t.assignedTo === developerId)
+  
+  const totalTasksResolved = devTasks.length
+  
+  const resolutionTimes = devTasks.map(task => {
+    const created = new Date(task.createdDate).getTime()
+    const resolved = new Date(task.resolvedDate).getTime()
+    return (resolved - created) / (1000 * 60 * 60 * 24)
+  })
+  const avgResolutionTime = resolutionTimes.length > 0
+    ? resolutionTimes.reduce((sum, time) => sum + time, 0) / resolutionTimes.length
+    : 0
+  
+  const priorities: TaskPriority[] = ['Low', 'Normal', 'High', 'Critical']
+  const tasksByPriority = priorities.map(priority => ({
+    priority,
+    count: devTasks.filter(t => t.priority === priority).length,
+  }))
+  
+  const categories = [...new Set(devTasks.map(t => t.category))]
+  const tasksByCategory = categories.map(category => ({
+    category,
+    count: devTasks.filter(t => t.category === category).length,
+  })).sort((a, b) => b.count - a.count)
+  
+  const tasksOverTime: { date: string; count: number }[] = []
+  const now = new Date()
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(now)
+    date.setDate(date.getDate() - i)
+    const dateStr = date.toISOString().split('T')[0]
+    
+    const count = devTasks.filter(task => {
+      const resolvedDate = task.resolvedDate.split('T')[0]
+      return resolvedDate === dateStr
+    }).length
+    
+    tasksOverTime.push({ date: dateStr, count })
+  }
+  
+  const totalEstimated = devTasks.reduce((sum, t) => sum + t.estimatedHours, 0)
+  const totalActual = devTasks.reduce((sum, t) => sum + t.actualHours, 0)
+  const estimateAccuracy = totalEstimated > 0 
+    ? Math.round((1 - Math.abs(totalActual - totalEstimated) / totalEstimated) * 100)
+    : 100
+  
+  return {
+    developerId,
+    totalTasksResolved,
+    avgResolutionTime: Math.round(avgResolutionTime * 10) / 10,
+    tasksByPriority,
+    tasksByCategory,
+    tasksOverTime,
+    estimateAccuracy,
+  }
+}
+
+export function generateTeamTaskMetrics(
+  tasks: SharePointTask[],
+  developers: Developer[],
+  days: number = 90
+): TeamTaskMetrics {
+  const totalTasksResolved = tasks.length
+  
+  const resolutionTimes = tasks.map(task => {
+    const created = new Date(task.createdDate).getTime()
+    const resolved = new Date(task.resolvedDate).getTime()
+    return (resolved - created) / (1000 * 60 * 60 * 24)
+  })
+  const avgResolutionTime = resolutionTimes.length > 0
+    ? resolutionTimes.reduce((sum, time) => sum + time, 0) / resolutionTimes.length
+    : 0
+  
+  const totalEstimatedHours = tasks.reduce((sum, t) => sum + t.estimatedHours, 0)
+  const totalActualHours = tasks.reduce((sum, t) => sum + t.actualHours, 0)
+  
+  const priorities: TaskPriority[] = ['Low', 'Normal', 'High', 'Critical']
+  const tasksByPriority = priorities.map(priority => ({
+    priority,
+    count: tasks.filter(t => t.priority === priority).length,
+  }))
+  
+  const taskCompletionTrend: { date: string; count: number }[] = []
+  const now = new Date()
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(now)
+    date.setDate(date.getDate() - i)
+    const dateStr = date.toISOString().split('T')[0]
+    
+    const count = tasks.filter(task => {
+      const resolvedDate = task.resolvedDate.split('T')[0]
+      return resolvedDate === dateStr
+    }).length
+    
+    taskCompletionTrend.push({ date: dateStr, count })
+  }
+  
+  const topPerformers = developers.map(dev => ({
+    developerId: dev.id,
+    tasksResolved: tasks.filter(t => t.assignedTo === dev.id).length,
+  })).sort((a, b) => b.tasksResolved - a.tasksResolved).slice(0, 5)
+  
+  return {
+    totalTasksResolved,
+    avgResolutionTime: Math.round(avgResolutionTime * 10) / 10,
+    totalEstimatedHours,
+    totalActualHours: Math.round(totalActualHours * 10) / 10,
+    tasksByPriority,
+    taskCompletionTrend,
+    topPerformers,
   }
 }

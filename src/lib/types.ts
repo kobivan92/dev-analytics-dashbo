@@ -56,3 +56,43 @@ export interface DateRangeSelection {
   startDate?: Date
   endDate?: Date
 }
+
+export type TaskPriority = 'Low' | 'Normal' | 'High' | 'Critical'
+export type TaskStatus = 'Resolved' | 'Closed' | 'Completed'
+
+export interface SharePointTask {
+  id: string
+  title: string
+  description: string
+  assignedTo: string
+  createdBy: string
+  priority: TaskPriority
+  status: TaskStatus
+  createdDate: string
+  resolvedDate: string
+  dueDate: string
+  category: string
+  estimatedHours: number
+  actualHours: number
+  tags: string[]
+}
+
+export interface DeveloperTaskMetrics {
+  developerId: string
+  totalTasksResolved: number
+  avgResolutionTime: number
+  tasksByPriority: { priority: TaskPriority; count: number }[]
+  tasksByCategory: { category: string; count: number }[]
+  tasksOverTime: { date: string; count: number }[]
+  estimateAccuracy: number
+}
+
+export interface TeamTaskMetrics {
+  totalTasksResolved: number
+  avgResolutionTime: number
+  totalEstimatedHours: number
+  totalActualHours: number
+  tasksByPriority: { priority: TaskPriority; count: number }[]
+  taskCompletionTrend: { date: string; count: number }[]
+  topPerformers: { developerId: string; tasksResolved: number }[]
+}
