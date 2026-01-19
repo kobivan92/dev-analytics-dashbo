@@ -4,13 +4,8 @@ import { TeamDashboard } from '@/components/TeamDashboard'
 import { DeveloperView } from '@/components/DeveloperView'
 import { RepositoriesView } from '@/components/RepositoriesView'
 import { TasksView } from '@/components/TasksView'
-import { 
-  generateSharePointTasks,
-  generateDeveloperTaskMetrics,
-  generateTeamTaskMetrics
-} from '@/lib/mockData'
 import { ChartBar, User, GitBranch, CheckCircle, ArrowsClockwise } from '@phosphor-icons/react'
-import type { Developer, DeveloperMetrics, Repository } from '@/lib/types'
+import type { Developer, DeveloperMetrics, Repository, SharePointTask, DeveloperTaskMetrics, TeamTaskMetrics, TaskPriority, TaskStatus } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 
 const API_BASE = 'http://localhost:3001/api'
@@ -42,6 +37,59 @@ function App() {
   const [syncStatus, setSyncStatus] = useState<any>(null)
   const [teamCommitTrend, setTeamCommitTrend] = useState<{ date: string; commits: number }[]>([])
   const [teamMetricsComparison, setTeamMetricsComparison] = useState<any>(null)
+  const [tasks, setTasks] = useState<SharePointTask[]>([])
+
+  // Fetch tasks from API
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/tasks`)
+      const tasksData = await res.json()
+      // Map API data to SharePointTask format
+      // Try to match assigned_to email to developer ID, fallback to email if not found
+      const mappedTasks: SharePointTask[] = tasksData.map((t: any) => {
+        const assignedEmail = t.assigned_to || 'Unassigned'
+        const assignedDev = developers.find(d => d.email === assignedEmail)
+        
+        // Map database status to UI status
+        let uiStatus: TaskStatus
+        if (t.status === 'New') {
+          uiStatus = 'Active'
+        } else if (t.status === 'In progress') {
+          uiStatus = 'In Progress'
+        } else if (t.status === 'Completed') {
+          uiStatus = 'Completed'
+        } else if (t.status === 'Blocked') {
+          uiStatus = 'Blocked'
+        } else {
+          uiStatus = 'Active' // fallback
+        }
+        
+        return {
+          id: t.id.toString(),
+          title: t.title,
+          description: t.description || '',
+          assignedTo: assignedDev?.id || assignedEmail,
+          createdBy: t.issued_by || 'Unknown',
+          priority: (t.priority || 'Normal') as TaskPriority,
+          status: uiStatus,
+          createdDate: t.created_at || new Date().toISOString(),
+          resolvedDate: t.status === 'Completed' ? t.updated_at : undefined,
+          dueDate: t.deadline || new Date().toISOString(),
+          category: t.stage || 'General',
+          estimatedHours: t.resolution_time_hours || 0,
+          actualHours: 0,
+          tags: []
+        }
+      })
+      setTasks(mappedTasks)
+    } catch (err) {
+      console.error('Failed to fetch tasks:', err)
+    }
+  }
+
+  useEffect(() => {
+    fetchTasks()
+  }, [developers])
 
   // Fetch sync status periodically
   useEffect(() => {
@@ -160,23 +208,44 @@ function App() {
     }
   }, [repositories, teamCommitTrend, teamMetricsComparison])
 
-  const sharePointTasks = useMemo(() => {
-    if (developers.length === 0) return []
-    return generateSharePointTasks(developers)
-  }, [developers])
-
   const devTaskMetrics = useMemo(() => {
-    const metrics = new Map()
+    const metrics = new Map<string, DeveloperTaskMetrics>()
     developers.forEach(dev => {
-      metrics.set(dev.id, generateDeveloperTaskMetrics(dev.id, sharePointTasks))
+      const devTasks = tasks.filter(t => t.assignedTo === dev.email || t.assignedTo === dev.id)
+      metrics.set(dev.id, {
+        developerId: dev.id,
+        totalTasksActive: devTasks.filter(t => t.status === 'Active' || t.status === 'In Progress' || t.status === 'Blocked').length,
+        totalTasksResolved: devTasks.filter(t => t.status === 'Completed' || t.status === 'Resolved').length,
+        avgResolutionTime: 0,
+        tasksByPriority: [
+          { priority: 'Low' as TaskPriority, count: devTasks.filter(t => t.priority === 'Low').length },
+          { priority: 'Normal' as TaskPriority, count: devTasks.filter(t => t.priority === 'Normal').length },
+          { priority: 'High' as TaskPriority, count: devTasks.filter(t => t.priority === 'High').length },
+          { priority: 'Critical' as TaskPriority, count: devTasks.filter(t => t.priority === 'Critical').length },
+        ],
+        tasksByCategory: [],
+        tasksOverTime: [],
+        estimateAccuracy: 0
+      })
     })
     return metrics
-  }, [developers, sharePointTasks])
+  }, [developers, tasks])
 
-  const teamTaskMetrics = useMemo(() => 
-    generateTeamTaskMetrics(sharePointTasks, developers),
-    [sharePointTasks, developers]
-  )
+  const teamTaskMetrics = useMemo((): TeamTaskMetrics => ({
+    totalTasksActive: tasks.filter(t => t.status === 'Active' || t.status === 'In Progress' || t.status === 'Blocked').length,
+    totalTasksResolved: tasks.filter(t => t.status === 'Completed' || t.status === 'Resolved').length,
+    avgResolutionTime: 0,
+    totalEstimatedHours: tasks.reduce((sum, t) => sum + (t.estimatedHours || 0), 0),
+    totalActualHours: 0,
+    tasksByPriority: [
+      { priority: 'Low' as TaskPriority, count: tasks.filter(t => t.priority === 'Low').length },
+      { priority: 'Normal' as TaskPriority, count: tasks.filter(t => t.priority === 'Normal').length },
+      { priority: 'High' as TaskPriority, count: tasks.filter(t => t.priority === 'High').length },
+      { priority: 'Critical' as TaskPriority, count: tasks.filter(t => t.priority === 'Critical').length },
+    ],
+    taskCompletionTrend: [],
+    topPerformers: []
+  }), [tasks])
 
   const handleSelectDeveloper = (devId: string) => {
     setSelectedDevId(devId)
@@ -276,7 +345,7 @@ function App() {
                 developer={selectedDeveloper}
                 metrics={selectedMetrics}
                 taskMetrics={selectedTaskMetrics}
-                tasks={sharePointTasks}
+                tasks={tasks}
                 developers={developers}
                 onBack={handleBackToTeam}
               />
@@ -296,7 +365,11 @@ function App() {
           </TabsContent>
 
           <TabsContent value="tasks">
-            <TasksView tasks={sharePointTasks} developers={developers} />
+            <TasksView 
+              tasks={tasks} 
+              developers={developers} 
+              onTasksChange={fetchTasks}
+            />
           </TabsContent>
         </Tabs>
       </main>

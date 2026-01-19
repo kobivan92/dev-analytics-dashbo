@@ -752,6 +752,217 @@ app.post('/api/reload-database', async (req, res) => {
   }
 })
 
+// Tasks API endpoints
+
+// Get all tasks
+app.get('/api/tasks', (req, res) => {
+  try {
+    const db = getDatabase()
+    const result = db.exec(`
+      SELECT 
+        t.*,
+        parent.title as parent_task_title
+      FROM tasks t
+      LEFT JOIN tasks parent ON t.parent_task_id = parent.id
+      ORDER BY t.created_at DESC
+    `)
+    
+    const tasks = result[0]
+      ? result[0].values.map((row: any) => ({
+          id: row[0],
+          title: row[1],
+          description: row[2],
+          priority: row[3],
+          status: row[4],
+          assigned_to: row[5],
+          issued_by: row[6],
+          start_date: row[7],
+          deadline: row[8],
+          stage: row[9],
+          resolution_time_hours: row[10],
+          related_issue: row[11],
+          parent_task_id: row[12],
+          created_at: row[13],
+          updated_at: row[14],
+          parent_task_title: row[15],
+        }))
+      : []
+    
+    res.json(tasks)
+  } catch (error: any) {
+    console.error('Failed to fetch tasks:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Get subtasks for a task
+app.get('/api/tasks/:id/subtasks', (req, res) => {
+  try {
+    const db = getDatabase()
+    const { id } = req.params
+    
+    const result = db.exec(`
+      SELECT * FROM tasks
+      WHERE parent_task_id = ?
+      ORDER BY created_at ASC
+    `, [id])
+    
+    const subtasks = result[0]
+      ? result[0].values.map((row: any) => ({
+          id: row[0],
+          title: row[1],
+          description: row[2],
+          priority: row[3],
+          status: row[4],
+          assigned_to: row[5],
+          issued_by: row[6],
+          start_date: row[7],
+          deadline: row[8],
+          stage: row[9],
+          resolution_time_hours: row[10],
+          related_issue: row[11],
+          parent_task_id: row[12],
+          created_at: row[13],
+          updated_at: row[14],
+        }))
+      : []
+    
+    res.json(subtasks)
+  } catch (error: any) {
+    console.error('Failed to fetch subtasks:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Create a new task
+app.post('/api/tasks', async (req, res) => {
+  try {
+    const db = getDatabase()
+    const {
+      title,
+      description,
+      priority,
+      status,
+      assigned_to,
+      issued_by,
+      start_date,
+      deadline,
+      stage,
+      resolution_time_hours,
+      related_issue,
+      parent_task_id
+    } = req.body
+    
+    db.run(`
+      INSERT INTO tasks (
+        title, description, priority, status, assigned_to, issued_by,
+        start_date, deadline, stage, resolution_time_hours, related_issue, parent_task_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      title,
+      description || null,
+      priority || 'Normal',
+      status || 'New',
+      assigned_to || null,
+      issued_by || null,
+      start_date || null,
+      deadline || null,
+      stage || null,
+      resolution_time_hours || null,
+      related_issue || null,
+      parent_task_id || null
+    ])
+    
+    const { saveDatabase } = await import('./database')
+    await saveDatabase()
+    
+    res.json({ success: true, message: 'Task created successfully' })
+  } catch (error: any) {
+    console.error('Failed to create task:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Update a task
+app.put('/api/tasks/:id', async (req, res) => {
+  try {
+    const db = getDatabase()
+    const { id } = req.params
+    const {
+      title,
+      description,
+      priority,
+      status,
+      assigned_to,
+      issued_by,
+      start_date,
+      deadline,
+      stage,
+      resolution_time_hours,
+      related_issue,
+      parent_task_id
+    } = req.body
+    
+    db.run(`
+      UPDATE tasks SET
+        title = ?,
+        description = ?,
+        priority = ?,
+        status = ?,
+        assigned_to = ?,
+        issued_by = ?,
+        start_date = ?,
+        deadline = ?,
+        stage = ?,
+        resolution_time_hours = ?,
+        related_issue = ?,
+        parent_task_id = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `, [
+      title,
+      description,
+      priority,
+      status,
+      assigned_to,
+      issued_by,
+      start_date,
+      deadline,
+      stage,
+      resolution_time_hours,
+      related_issue,
+      parent_task_id,
+      id
+    ])
+    
+    const { saveDatabase } = await import('./database')
+    await saveDatabase()
+    
+    res.json({ success: true, message: 'Task updated successfully' })
+  } catch (error: any) {
+    console.error('Failed to update task:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Delete a task
+app.delete('/api/tasks/:id', async (req, res) => {
+  try {
+    const db = getDatabase()
+    const { id } = req.params
+    
+    db.run('DELETE FROM tasks WHERE id = ?', [id])
+    
+    const { saveDatabase } = await import('./database')
+    await saveDatabase()
+    
+    res.json({ success: true, message: 'Task deleted successfully' })
+  } catch (error: any) {
+    console.error('Failed to delete task:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`API server listening on http://localhost:${PORT}`)
 })
