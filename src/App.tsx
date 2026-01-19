@@ -64,10 +64,40 @@ function App() {
           uiStatus = 'Active' // fallback
         }
         
+        // Extract subtasks and attachments from description metadata
+        let description = t.description || ''
+        let tags: string[] = []
+        const metaMatch = description.match(/<!-- META:(.+?) -->/)
+        if (metaMatch) {
+          try {
+            const metadata = JSON.parse(metaMatch[1])
+            // Encode subtasks as tags
+            if (metadata.subtasks && Array.isArray(metadata.subtasks)) {
+              metadata.subtasks.forEach((st: any) => {
+                tags.push(`subtask:${st.id}|${st.completed}|${st.title}`)
+              })
+            }
+            // Encode attachments as tags
+            if (metadata.attachments && Array.isArray(metadata.attachments)) {
+              metadata.attachments.forEach((file: string) => {
+                tags.push(`file:${file}`)
+              })
+            }
+            // Encode documentation link as tag
+            if (metadata.documentationLink && typeof metadata.documentationLink === 'string') {
+              tags.push(`doclink:${metadata.documentationLink}`)
+            }
+            // Remove metadata from description
+            description = description.replace(/\n?<!-- META:.+? -->/, '').trim()
+          } catch (e) {
+            console.error('Failed to parse task metadata:', e)
+          }
+        }
+        
         return {
           id: t.id.toString(),
           title: t.title,
-          description: t.description || '',
+          description: description,
           assignedTo: assignedDev?.id || assignedEmail,
           createdBy: t.issued_by || 'Unknown',
           priority: (t.priority || 'Normal') as TaskPriority,
@@ -78,7 +108,7 @@ function App() {
           category: t.stage || 'General',
           estimatedHours: t.resolution_time_hours || 0,
           actualHours: 0,
-          tags: []
+          tags: tags
         }
       })
       setTasks(mappedTasks)

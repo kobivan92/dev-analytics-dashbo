@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Progress } from '@/components/ui/progress'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import type { SharePointTask, TaskPriority, TaskStatus, Developer } from '@/lib/types'
 import { MagnifyingGlass, CheckCircle, Calendar, Clock, Hourglass, Warning, Plus, PencilSimple, Trash, Kanban, ListBullets } from '@phosphor-icons/react'
@@ -21,6 +22,12 @@ interface TasksViewProps {
   onTasksChange: () => void
 }
 
+interface Subtask {
+  id: string
+  title: string
+  completed: boolean
+}
+
 interface TaskFormData {
   title: string
   description: string
@@ -30,6 +37,9 @@ interface TaskFormData {
   dueDate: string
   category: string
   estimatedHours: number
+  documentationLink: string
+  subtasks: Subtask[]
+  attachments: string[]
 }
 
 const priorityColors: Record<TaskPriority, string> = {
@@ -57,6 +67,7 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [assignedToFilter, setAssignedToFilter] = useState<string>('all')
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<SharePointTask | null>(null)
@@ -71,7 +82,10 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
     status: 'Active',
     dueDate: new Date().toISOString().split('T')[0],
     category: 'General',
-    estimatedHours: 0
+    estimatedHours: 0,
+    documentationLink: '',
+    subtasks: [],
+    attachments: []
   })
 
   const currentTeamMembers = ['grammaton88', 'kobivan', 'Ilia', 'Ilia Lomsadze', 'abezhitashvili', 'gchutlashvili', 'vumpy']
@@ -94,12 +108,13 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
       const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter
       const matchesCategory = categoryFilter === 'all' || task.category === categoryFilter
       const matchesStatus = statusFilter === 'all' || task.status === statusFilter
-      return matchesSearch && matchesPriority && matchesCategory && matchesStatus
+      const matchesAssignedTo = assignedToFilter === 'all' || task.assignedTo === assignedToFilter
+      return matchesSearch && matchesPriority && matchesCategory && matchesStatus && matchesAssignedTo
     })
   }
 
-  const filteredActiveTasks = useMemo(() => filterTasks(activeTasks), [activeTasks, searchQuery, priorityFilter, categoryFilter, statusFilter])
-  const filteredResolvedTasks = useMemo(() => filterTasks(resolvedTasks), [resolvedTasks, searchQuery, priorityFilter, categoryFilter, statusFilter])
+  const filteredActiveTasks = useMemo(() => filterTasks(activeTasks), [activeTasks, searchQuery, priorityFilter, categoryFilter, statusFilter, assignedToFilter])
+  const filteredResolvedTasks = useMemo(() => filterTasks(resolvedTasks), [resolvedTasks, searchQuery, priorityFilter, categoryFilter, statusFilter, assignedToFilter])
 
   // Kanban columns
   const kanbanColumns: { status: TaskStatus | 'New'; label: string; tasks: SharePointTask[] }[] = useMemo(() => {
@@ -110,7 +125,7 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
       { status: 'Completed' as TaskStatus, label: 'Completed', tasks: allFilteredTasks.filter(t => t.status === 'Completed' || t.status === 'Resolved' || t.status === 'Closed') },
       { status: 'Blocked' as TaskStatus, label: 'Blocked', tasks: allFilteredTasks.filter(t => t.status === 'Blocked') },
     ]
-  }, [tasks, searchQuery, priorityFilter, categoryFilter, statusFilter])
+  }, [tasks, searchQuery, priorityFilter, categoryFilter, statusFilter, assignedToFilter])
 
   const getDeveloper = (developerId: string) => {
     return developers.find(d => d.id === developerId)
@@ -122,6 +137,20 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
   
   const getDaysUntilDue = (dueDate: string) => {
     return differenceInDays(new Date(dueDate), new Date())
+  }
+
+  const calculateProgress = (task: SharePointTask) => {
+    // Extract subtasks from tags
+    const subtasks = task.tags.filter(t => t.startsWith('subtask:'))
+    if (subtasks.length === 0) return null
+    
+    const completed = subtasks.filter(t => {
+      const [, data] = t.split('subtask:')
+      const [, completedFlag] = data.split('|')
+      return completedFlag === 'true'
+    }).length
+    
+    return Math.round((completed / subtasks.length) * 100)
   }
 
   const handleDragStart = (task: SharePointTask) => {
@@ -210,6 +239,36 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
     }
   }
 
+  const handleAddSubtask = () => {
+    const newSubtask: Subtask = {
+      id: Date.now().toString(),
+      title: '',
+      completed: false
+    }
+    setFormData({ ...formData, subtasks: [...formData.subtasks, newSubtask] })
+  }
+
+  const handleRemoveSubtask = (id: string) => {
+    setFormData({ ...formData, subtasks: formData.subtasks.filter(s => s.id !== id) })
+  }
+
+  const handleUpdateSubtask = (id: string, updates: Partial<Subtask>) => {
+    setFormData({
+      ...formData,
+      subtasks: formData.subtasks.map(s => s.id === id ? { ...s, ...updates } : s)
+    })
+  }
+
+  const handleAddAttachment = (fileName: string) => {
+    if (fileName && !formData.attachments.includes(fileName)) {
+      setFormData({ ...formData, attachments: [...formData.attachments, fileName] })
+    }
+  }
+
+  const handleRemoveAttachment = (fileName: string) => {
+    setFormData({ ...formData, attachments: formData.attachments.filter(f => f !== fileName) })
+  }
+
   const handleCreateNew = () => {
     setEditingTask(null)
     setFormData({
@@ -220,13 +279,29 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
       status: 'Active',
       dueDate: new Date().toISOString().split('T')[0],
       category: 'General',
-      estimatedHours: 0
+      estimatedHours: 0,
+      documentationLink: '',
+      subtasks: [],
+      attachments: []
     })
     setIsEditDialogOpen(true)
   }
 
   const handleEdit = (task: SharePointTask) => {
     setEditingTask(task)
+    // Parse subtasks and attachments from tags
+    const subtasks: Subtask[] = task.tags
+      .filter(t => t.startsWith('subtask:'))
+      .map(t => {
+        const [, data] = t.split('subtask:')
+        const parts = data.split('|')
+        const id = parts[0]
+        const completed = parts[1] === 'true'
+        const title = parts.slice(2).join('|') // In case title contains |
+        return { id, completed, title }
+      })
+    const attachments = task.tags.filter(t => t.startsWith('file:')).map(t => t.replace('file:', ''))
+    
     setFormData({
       title: task.title,
       description: task.description,
@@ -235,7 +310,9 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
       status: task.status,
       dueDate: task.dueDate.split('T')[0],
       category: task.category,
-      estimatedHours: task.estimatedHours
+      estimatedHours: task.estimatedHours,
+      subtasks,
+      attachments
     })
     setIsEditDialogOpen(true)
   }
@@ -250,14 +327,34 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
     try {
       const assignedDev = developers.find(d => d.id === formData.assignedTo)
       
+      // Encode subtasks, attachments, and documentation link in description as JSON metadata
+      const metadata = {
+        subtasks: formData.subtasks,
+        attachments: formData.attachments,
+        documentationLink: formData.documentationLink
+      }
+      const descriptionWithMeta = `${formData.description}\n<!-- META:${JSON.stringify(metadata)} -->`
+      
+      // Map UI status to database status
+      let dbStatus = formData.status
+      if (formData.status === 'Active') {
+        dbStatus = 'New'
+      } else if (formData.status === 'In Progress') {
+        dbStatus = 'In progress'
+      } else if (formData.status === 'Completed') {
+        dbStatus = 'Completed'
+      } else if (formData.status === 'Blocked') {
+        dbStatus = 'Blocked'
+      }
+      
       if (editingTask) {
         // For updates, send all existing fields plus the changes
         const payload = {
           title: formData.title,
-          description: formData.description,
+          description: descriptionWithMeta,
           assigned_to: assignedDev?.email || formData.assignedTo,
           priority: formData.priority,
-          status: formData.status === 'Active' ? 'New' : formData.status,
+          status: dbStatus,
           deadline: formData.dueDate,
           stage: formData.category,
           resolution_time_hours: formData.estimatedHours,
@@ -282,10 +379,10 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
         // For new tasks
         const payload = {
           title: formData.title,
-          description: formData.description,
+          description: descriptionWithMeta,
           assigned_to: assignedDev?.email || formData.assignedTo,
           priority: formData.priority,
-          status: formData.status === 'Active' ? 'New' : formData.status,
+          status: dbStatus,
           deadline: formData.dueDate,
           stage: formData.category,
           resolution_time_hours: formData.estimatedHours
@@ -421,9 +518,65 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
             </Badge>
           </div>
 
-          {task.tags.length > 0 && (
+          {/* Progress bar for subtasks */}
+          {(() => {
+            const progress = calculateProgress(task)
+            const subtasks = task.tags.filter(t => t.startsWith('subtask:'))
+            const attachmentCount = task.tags.filter(t => t.startsWith('file:')).length
+            
+            return (
+              <>
+                {subtasks.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{subtasks.length} subtask{subtasks.length !== 1 ? 's' : ''}</span>
+                      <span>{progress}%</span>
+                    </div>
+                    <Progress value={progress || 0} className="h-2" />
+                    <div className="space-y-1 pl-2 border-l-2 border-gray-200">
+                      {subtasks.map((subtaskTag, idx) => {
+                        const [, data] = subtaskTag.split('subtask:')
+                        const [, completed, title] = data.split('|')
+                        return (
+                          <div key={idx} className="flex items-center gap-2 text-xs">
+                            <CheckCircle 
+                              size={14} 
+                              weight={completed === 'true' ? 'fill' : 'regular'}
+                              className={completed === 'true' ? 'text-green-600' : 'text-gray-400'}
+                            />
+                            <span className={completed === 'true' ? 'text-muted-foreground line-through' : ''}>
+                              {title}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                {attachmentCount > 0 && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    📎 {attachmentCount} file{attachmentCount !== 1 ? 's' : ''}
+                  </div>
+                )}
+                {task.tags.find(t => t.startsWith('doclink:')) && (
+                  <div className="mt-2">
+                    <a 
+                      href={task.tags.find(t => t.startsWith('doclink:'))?.replace('doclink:', '')} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      📄 Documentation
+                    </a>
+                  </div>
+                )}
+              </>
+            )
+          })()}
+
+          {task.tags.filter(t => !t.startsWith('subtask:') && !t.startsWith('file:') && !t.startsWith('doclink:')).length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3">
-              {task.tags.map(tag => (
+              {task.tags.filter(t => !t.startsWith('subtask:') && !t.startsWith('file:') && !t.startsWith('doclink:')).map(tag => (
                 <Badge key={tag} variant="outline" className="text-xs">
                   {tag}
                 </Badge>
@@ -518,6 +671,19 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
             <SelectItem value="Resolved">Resolved</SelectItem>
             <SelectItem value="Closed">Closed</SelectItem>
             <SelectItem value="Completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="Assigned To" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Developers</SelectItem>
+            {availableDevelopers.map(dev => (
+              <SelectItem key={dev.id} value={dev.id}>
+                {dev.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -667,6 +833,57 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
                               {task.priority}
                             </Badge>
                             
+                            {/* Subtasks in Kanban */}
+                            {(() => {
+                              const subtasks = task.tags.filter(t => t.startsWith('subtask:'))
+                              const progress = calculateProgress(task)
+                              
+                              if (subtasks.length > 0) {
+                                return (
+                                  <div className="space-y-1">
+                                    <Progress value={progress || 0} className="h-1" />
+                                    <div className="space-y-0.5">
+                                      {subtasks.slice(0, 3).map((subtaskTag, idx) => {
+                                        const [, data] = subtaskTag.split('subtask:')
+                                        const [, completed, title] = data.split('|')
+                                        return (
+                                          <div key={idx} className="flex items-center gap-1 text-[10px]">
+                                            <CheckCircle 
+                                              size={10} 
+                                              weight={completed === 'true' ? 'fill' : 'regular'}
+                                              className={completed === 'true' ? 'text-green-600 flex-shrink-0' : 'text-gray-400 flex-shrink-0'}
+                                            />
+                                            <span className={`truncate ${completed === 'true' ? 'text-muted-foreground line-through' : ''}`}>
+                                              {title}
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
+                                      {subtasks.length > 3 && (
+                                        <div className="text-[10px] text-muted-foreground pl-3">
+                                          +{subtasks.length - 3} more
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              }
+                              return null
+                            })()}
+                            
+                            {/* Documentation link */}
+                            {task.tags.find(t => t.startsWith('doclink:')) && (
+                              <a 
+                                href={task.tags.find(t => t.startsWith('doclink:'))?.replace('doclink:', '')} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-blue-600 hover:underline flex items-center gap-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                📄 Docs
+                              </a>
+                            )}
+                            
                             {task.resolvedDate ? (
                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <CheckCircle size={12} weight="fill" className="text-green-600" />
@@ -772,12 +989,10 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Active">New</SelectItem>
                     <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Blocked">Blocked</SelectItem>
-                    <SelectItem value="Under Review">Under Review</SelectItem>
-                    <SelectItem value="Resolved">Resolved</SelectItem>
                     <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Blocked">Blocked</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -812,6 +1027,111 @@ export function TasksView({ tasks, developers, onTasksChange }: TasksViewProps) 
                   onChange={(e) => setFormData({ ...formData, estimatedHours: parseFloat(e.target.value) || 0 })}
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="documentationLink">Documentation Link</Label>
+              <Input
+                id="documentationLink"
+                type="url"
+                value={formData.documentationLink}
+                onChange={(e) => setFormData({ ...formData, documentationLink: e.target.value })}
+                placeholder="https://docs.example.com"
+              />
+            </div>
+            
+            {/* Subtasks Section */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Subtasks</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddSubtask}
+                  className="gap-1"
+                >
+                  <Plus size={14} />
+                  Add Subtask
+                </Button>
+              </div>
+              {formData.subtasks.length > 0 && (
+                <div className="space-y-2 border rounded-lg p-3">
+                  {formData.subtasks.map(subtask => (
+                    <div key={subtask.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={subtask.completed}
+                        onChange={(e) => handleUpdateSubtask(subtask.id, { completed: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <Input
+                        value={subtask.title}
+                        onChange={(e) => handleUpdateSubtask(subtask.id, { title: e.target.value })}
+                        placeholder="Subtask description"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveSubtask(subtask.id)}
+                        className="h-8 w-8 text-red-600"
+                      >
+                        <Trash size={14} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Attachments Section */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Attachments</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const input = document.createElement('input')
+                      input.type = 'file'
+                      input.multiple = true
+                      input.onchange = (e: any) => {
+                        const files = Array.from(e.target.files || []) as File[]
+                        files.forEach(file => handleAddAttachment(file.name))
+                      }
+                      input.click()
+                    }}
+                    className="gap-1"
+                  >
+                    <Plus size={14} />
+                    Upload Files
+                  </Button>
+                </div>
+              </div>
+              {formData.attachments.length > 0 && (
+                <div className="space-y-2 border rounded-lg p-3">
+                  {formData.attachments.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-2 text-sm">
+                      <div className="flex items-center gap-2 flex-1 truncate">
+                        <span className="text-xl">📎</span>
+                        <span className="truncate">{file}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveAttachment(file)}
+                        className="h-6 w-6 text-red-600 flex-shrink-0"
+                      >
+                        <Trash size={12} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
