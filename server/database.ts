@@ -101,12 +101,42 @@ function createTables(): void {
   db.run(`CREATE INDEX IF NOT EXISTS idx_commits_timestamp ON commits(timestamp)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_branches_repo ON branches(repo_id)`)
   
+  // Metadata table for tracking sync status
+  db.run(`
+    CREATE TABLE IF NOT EXISTS metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `)
+  
+  // Developer aliases table for preserving custom names
+  db.run(`
+    CREATE TABLE IF NOT EXISTS developer_aliases (
+      developer_id TEXT PRIMARY KEY,
+      custom_name TEXT NOT NULL,
+      FOREIGN KEY (developer_id) REFERENCES developers(id)
+    )
+  `)
+  
   console.log('Database tables created/verified')
 }
 
 export function getDatabase(): Database {
   if (!db) throw new Error('Database not initialized')
   return db
+}
+
+export async function reloadDatabase(): Promise<void> {
+  console.log('Reloading database from disk...')
+  const SQL = await initSqlJs()
+  
+  if (fs.existsSync(DB_PATH)) {
+    const buffer = fs.readFileSync(DB_PATH)
+    db = new SQL.Database(buffer)
+    console.log('Database reloaded from', DB_PATH)
+  } else {
+    throw new Error('Database file not found')
+  }
 }
 
 export function saveDatabase(): void {
@@ -151,18 +181,41 @@ export function insertDeveloper(dev: {
 }): void {
   if (!db) throw new Error('Database not initialized')
   
-  db.run(`
-    INSERT OR REPLACE INTO developers 
-    (id, name, email, avatar, role, joinedDate)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `, [
-    dev.id,
-    dev.name,
-    dev.email || `${dev.name.toLowerCase().replace(/\s+/g, '.')}@scm.local`,
-    dev.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(dev.name)}&background=random&size=128`,
-    dev.role || 'Contributor',
-    dev.joinedDate || new Date().toISOString()
-  ])
+  // Check if developer already exists
+  const existing = db.exec(`SELECT id, joinedDate FROM developers WHERE id = ?`, [dev.id])
+  
+  if (existing[0] && existing[0].values.length > 0) {
+    // Check if there's a custom name alias
+    const aliasResult = db.exec(`SELECT custom_name FROM developer_aliases WHERE developer_id = ?`, [dev.id])
+    const customName = aliasResult[0]?.values[0]?.[0]
+    
+    // Developer exists - only update name if no custom alias, always update email, avatar, role
+    db.run(`
+      UPDATE developers 
+      SET name = ?, email = ?, avatar = ?, role = ?
+      WHERE id = ?
+    `, [
+      customName || dev.name, // Use custom name if it exists, otherwise use SCM name
+      dev.email || `${dev.name.toLowerCase().replace(/\s+/g, '.')}@scm.local`,
+      dev.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(dev.name)}&background=random&size=128`,
+      dev.role || 'Contributor',
+      dev.id
+    ])
+  } else {
+    // New developer - insert with joinedDate
+    db.run(`
+      INSERT INTO developers 
+      (id, name, email, avatar, role, joinedDate)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [
+      dev.id,
+      dev.name,
+      dev.email || `${dev.name.toLowerCase().replace(/\s+/g, '.')}@scm.local`,
+      dev.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(dev.name)}&background=random&size=128`,
+      dev.role || 'Contributor',
+      dev.joinedDate || new Date().toISOString()
+    ])
+  }
 }
 
 export function insertCommit(commit: {
@@ -217,4 +270,26 @@ export function insertBranch(branch: {
     branch.lastCommitDate || null,
     branch.commitCount || 0
   ])
+}
+
+export function setMetadata(key: string, value: string): void {
+  if (!db) throw new Error('Database not initialized')
+  
+  db.run(`
+    INSERT OR REPLACE INTO metadata (key, value)
+    VALUES (?, ?)
+  `, [key, value])
+}
+
+export function getMetadata(key: string): string | null {
+  if (!db) throw new Error('Database not initialized')
+  
+  const result = db.exec(`
+    SELECT value FROM metadata WHERE key = ?
+  `, [key])
+  
+  if (result[0] && result[0].values.length > 0) {
+    return result[0].values[0][0] as string
+  }
+  return null
 }

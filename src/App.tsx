@@ -9,8 +9,9 @@ import {
   generateDeveloperTaskMetrics,
   generateTeamTaskMetrics
 } from '@/lib/mockData'
-import { ChartBar, User, GitBranch, CheckCircle } from '@phosphor-icons/react'
+import { ChartBar, User, GitBranch, CheckCircle, ArrowsClockwise } from '@phosphor-icons/react'
 import type { Developer, DeveloperMetrics, Repository } from '@/lib/types'
+import { Badge } from '@/components/ui/badge'
 
 const API_BASE = 'http://localhost:3001/api'
 
@@ -38,6 +39,26 @@ function App() {
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<any>(null)
+  const [teamCommitTrend, setTeamCommitTrend] = useState<{ date: string; commits: number }[]>([])
+  const [teamMetricsComparison, setTeamMetricsComparison] = useState<any>(null)
+
+  // Fetch sync status periodically
+  useEffect(() => {
+    const fetchSyncStatus = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/sync/status`)
+        const status = await res.json()
+        setSyncStatus(status)
+      } catch (err) {
+        console.warn('Failed to fetch sync status:', err)
+      }
+    }
+
+    fetchSyncStatus()
+    const interval = setInterval(fetchSyncStatus, 30000) // Update every 30 seconds
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -50,6 +71,20 @@ function App() {
         const devs = await devsRes.json()
         if (Array.isArray(devs) && devs.length > 0) {
           setDevelopers(devs)
+        }
+        
+        // Fetch team commit activity
+        const teamActivityRes = await fetch(`${API_BASE}/team/activity?days=90`)
+        const teamActivity = await teamActivityRes.json()
+        if (!cancelled && Array.isArray(teamActivity)) {
+          setTeamCommitTrend(teamActivity)
+        }
+        
+        // Fetch team metrics comparison
+        const teamComparisonRes = await fetch(`${API_BASE}/team/metrics-comparison`)
+        const teamComparison = await teamComparisonRes.json()
+        if (!cancelled) {
+          setTeamMetricsComparison(teamComparison)
         }
         
         // Check if we have repositories data
@@ -104,20 +139,26 @@ function App() {
 
   const teamMetrics = useMemo(() => {
     const totalRepos = repositories.length
-    const totalCommits = repositories.reduce((sum, r) => sum + (r.totalCommits || 0), 0)
     const avgHealthScore = repositories.length > 0 
       ? Math.round(repositories.reduce((sum, r) => sum + r.healthScore, 0) / repositories.length)
       : 0
     
+    // Use current month data from comparison API
+    const totalCommits = teamMetricsComparison?.commits?.current || 0
+    const activeRepositories = teamMetricsComparison?.activeRepos?.current || totalRepos
+    const totalPullRequests = teamMetricsComparison?.pullRequests?.current || 0
+    const totalReviews = teamMetricsComparison?.reviews?.current || 0
+    
     return {
       totalCommits,
-      activeRepositories: totalRepos,
-      totalPullRequests: 0,
-      totalReviews: 0,
+      activeRepositories,
+      totalPullRequests,
+      totalReviews,
       codeQuality: avgHealthScore,
-      commitTrend: []
+      commitTrend: teamCommitTrend,
+      comparison: teamMetricsComparison
     }
-  }, [repositories])
+  }, [repositories, teamCommitTrend, teamMetricsComparison])
 
   const sharePointTasks = useMemo(() => {
     if (developers.length === 0) return []
@@ -163,14 +204,37 @@ function App() {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 md:px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <ChartBar size={24} className="text-primary-foreground" weight="bold" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                <ChartBar size={24} className="text-primary-foreground" weight="bold" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">DevMetrics</h1>
+                <p className="text-sm text-muted-foreground">Developer Analytics Dashboard</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">DevMetrics</h1>
-              <p className="text-sm text-muted-foreground">Developer Analytics Dashboard</p>
-            </div>
+            
+            {/* Sync Status */}
+            {syncStatus && (
+              <div className="flex items-center gap-3">
+                {syncStatus.lastSyncTime && (
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Last sync</div>
+                    <div className="text-xs font-mono">
+                      {new Date(syncStatus.lastSyncTime).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+                <Badge variant="outline" className="gap-2">
+                  <ArrowsClockwise 
+                    size={14} 
+                    className={isSyncing ? 'animate-spin' : ''}
+                  />
+                  {isSyncing ? 'Syncing...' : 'Auto-sync: 1h'}
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
       </header>

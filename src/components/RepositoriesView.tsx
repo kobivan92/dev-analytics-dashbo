@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Progress } from '@/components/ui/progress'
 import { GitBranch, GitMerge } from '@phosphor-icons/react'
 import type { Repository, Developer } from '@/lib/types'
 import { motion } from 'framer-motion'
@@ -9,6 +8,17 @@ import { useState, useEffect } from 'react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown } from '@phosphor-icons/react'
 import { ActivityHeatmap } from '@/components/ActivityHeatmap'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ComposedChart,
+} from 'recharts'
 
 interface RepositoriesViewProps {
   repositories: Repository[]
@@ -30,6 +40,7 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
 
   type DayCount = { date: string; commits: number }
   const [repoActivity, setRepoActivity] = useState<Record<string, DayCount[]>>({})
+  const [repoMonthlyActivity, setRepoMonthlyActivity] = useState<Record<string, any[]>>({})
 
   const fetchBranches = async (repoId: string) => {
     if (branches[repoId] || loadingBranches[repoId]) return
@@ -79,7 +90,20 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
         console.warn('Failed to load repo activity', repoId, e)
       }
     }
-    repositories.forEach(r => fetchActivity(r.id))
+    const fetchMonthlyActivity = async (repoId: string) => {
+      if (repoMonthlyActivity[repoId]) return
+      try {
+        const res = await fetch(`http://localhost:3001/api/repositories/${encodeURIComponent(repoId)}/monthly-activity`)
+        const data = await res.json()
+        setRepoMonthlyActivity(prev => ({ ...prev, [repoId]: data }))
+      } catch (e) {
+        console.warn('Failed to load repo monthly activity', repoId, e)
+      }
+    }
+    repositories.forEach(r => {
+      fetchActivity(r.id)
+      fetchMonthlyActivity(r.id)
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repositories])
 
@@ -188,17 +212,45 @@ export function RepositoriesView({ repositories, developers }: RepositoriesViewP
                   </div>
 
                   <div>
-                    <div className="text-sm font-medium mb-2">Repository Health</div>
-                    <Progress value={repo.healthScore} className="h-2" />
+                    <div className="text-sm font-medium mb-2">Activity (Last Year)</div>
+                    <ActivityHeatmap 
+                      data={(repoActivity[repo.id] || []).map(d => ({ 
+                        date: d.date, 
+                        count: d.commits,
+                        repositories: d.contributors ? d.contributors.map((c: any) => ({
+                          name: c.name,
+                          commits: c.commits,
+                          additions: c.additions,
+                          deletions: c.deletions
+                        })) : []
+                      }))}
+                      weeks={52}
+                      size={10}
+                      showRepositories={true}
+                      tooltipLabel="contributors"
+                    />
                   </div>
 
                   <div>
-                    <div className="text-sm font-medium mb-2">Activity (Last Year)</div>
-                    <ActivityHeatmap 
-                      data={(repoActivity[repo.id] || []).map(d => ({ date: d.date, count: d.commits }))}
-                      weeks={26}
-                      size={8}
-                    />
+                    <div className="text-sm font-medium mb-3">Code Activity (Last 12 Months)</div>
+                    {(repoMonthlyActivity[repo.id] || []).length > 0 ? (
+                      <ResponsiveContainer width="100%" height={250}>
+                        <ComposedChart data={repoMonthlyActivity[repo.id]}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" style={{ fontSize: '12px' }} />
+                          <YAxis style={{ fontSize: '12px' }} />
+                          <Tooltip
+                            formatter={(value) => value.toLocaleString()}
+                            contentStyle={{ backgroundColor: 'rgba(0,0,0,0.75)', border: 'none', borderRadius: '4px', color: '#fff' }}
+                          />
+                          <Legend />
+                          <Bar dataKey="additions" name="Lines Added" stackId="a" fill="#10b981" />
+                          <Bar dataKey="deletions" name="Lines Deleted" stackId="a" fill="#ef4444" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="text-sm text-muted-foreground text-center py-8">No monthly activity data</div>
+                    )}
                   </div>
 
                   <div>

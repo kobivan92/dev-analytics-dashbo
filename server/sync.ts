@@ -1,4 +1,22 @@
-import { insertRepository, insertDeveloper, insertCommit, linkRepoCommit, insertBranch, saveDatabase } from './database'
+import { insertRepository, insertDeveloper, insertCommit, linkRepoCommit, insertBranch, saveDatabase, setMetadata } from './database'
+
+// Configuration for sync depth
+const SYNC_CONFIG = {
+  MAX_COMMITS_PER_REPO: 1000,  // Maximum commits to fetch per repository
+  DAYS_BACK: 365,               // How far back to look (in days)
+  PAGE_LIMIT: 100,              // Items per page when paginating
+}
+
+// Map duplicate developer IDs to their canonical ID
+const DEVELOPER_ID_MAP: Record<string, string> = {
+  '=Ilia Lomsadze': 'Ilia',
+  'vumpy': 'gchutlashvili',
+  'GChutlashvili': 'gchutlashvili',
+}
+
+function getCanonicalDeveloperId(scmAuthorName: string): string {
+  return DEVELOPER_ID_MAP[scmAuthorName] || scmAuthorName
+}
 
 function getSCMConfig() {
   return {
@@ -56,6 +74,92 @@ async function fetchJson(url: string, headers?: HeadersInit): Promise<any> {
   return res.json()
 }
 
+async function* paginateChangesets(url: string, headers: HeadersInit, cutoffDate: Date): AsyncGenerator<any> {
+  let currentUrl = `${url}?limit=${SYNC_CONFIG.PAGE_LIMIT}`
+  let totalFetched = 0
+  const cutoffMs = cutoffDate.getTime()
+  
+  while (currentUrl && totalFetched < SYNC_CONFIG.MAX_COMMITS_PER_REPO) {
+    try {
+      const data = await fetchJson(currentUrl, headers)
+      const changesets = data?._embedded?.changesets || []
+      
+      if (changesets.length === 0) break
+      
+      for (const cs of changesets) {
+        // Check date cutoff
+        const csDate = cs.date ? new Date(cs.date).getTime() : Date.now()
+        if (csDate < cutoffMs) {
+          return // Stop if commit is older than cutoff
+        }
+        
+        yield cs
+        totalFetched++
+        
+        if (totalFetched >= SYNC_CONFIG.MAX_COMMITS_PER_REPO) {
+          return
+        }
+      }
+      
+      // Check pagination - SCM Manager uses page (current) and pageTotal fields
+      const currentPage = data?.page ?? -1
+      const totalPages = data?.pageTotal ?? 0
+      
+      if (currentPage < 0 || totalPages === 0) break
+      if (currentPage >= totalPages - 1) break
+      
+      // Build next page URL
+      const nextPage = currentPage + 1
+      const baseUrl = url.split('?')[0]
+      currentUrl = `${baseUrl}?page=${nextPage}&limit=${SYNC_CONFIG.PAGE_LIMIT}`
+      
+    } catch (err) {
+      console.error(`Pagination error: ${err}`)
+      break
+    }
+  }
+}
+
+async function fetchDiff(url: string, headers?: HeadersInit): Promise<string> {
+  try {
+    const res = await fetch(url, { 
+      headers: {
+        ...headers,
+        'Accept': '*/*'
+      }
+    })
+    if (!res.ok) return ''
+    return await res.text()
+  } catch (err) {
+    console.warn(`Failed to fetch diff from ${url}:`, err)
+    return ''
+  }
+}
+
+function countDiffStats(diffText: string): { added: number; removed: number } {
+  if (!diffText) return { added: 0, removed: 0 }
+  
+  let added = 0
+  let removed = 0
+  
+  for (const line of diffText.split('\n')) {
+    // Skip diff headers
+    if (line.startsWith('+++ ') || line.startsWith('--- ')) {
+      continue
+    }
+    // Count additions
+    if (line.startsWith('+')) {
+      added++
+    }
+    // Count deletions
+    else if (line.startsWith('-')) {
+      removed++
+    }
+  }
+  
+  return { added, removed }
+}
+
 export async function syncFromSCM(): Promise<{ repos: number; developers: number; commits: number }> {
   const cfg = getSCMConfig()
   if (!cfg.baseUrl) throw new Error('SCM base URL not configured')
@@ -63,7 +167,12 @@ export async function syncFromSCM(): Promise<{ repos: number; developers: number
   const headers = buildAuthHeaders(cfg)
   const reposUrl = cfg.baseUrl.replace(/\/$/, '') + (cfg.reposPath || '/scm/api/v2/repositories').replace(/\/+$/, '') + '/'
   
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - SYNC_CONFIG.DAYS_BACK)
+  
   console.log('Fetching repositories from:', reposUrl)
+  console.log(`Date cutoff: ${cutoffDate.toISOString()} (${SYNC_CONFIG.DAYS_BACK} days back, max ${SYNC_CONFIG.MAX_COMMITS_PER_REPO} commits per repo)`)
+  
   const reposData = await fetchJson(reposUrl, headers)
   const repos: SCMRepository[] = reposData?._embedded?.repositories || []
   
@@ -79,7 +188,7 @@ export async function syncFromSCM(): Promise<{ repos: number; developers: number
     
     console.log(`Processing repository: ${repoId}`)
     
-    // Fetch changesets for this repository first to get metrics
+    // Fetch changesets with pagination and date filtering
     const changesetsUrl = repo._links?.changesets?.href || repo._links?.commits?.href
     let changesets: SCMChangeset[] = []
     let lastActivity = repo.lastModified || new Date().toISOString()
@@ -92,13 +201,16 @@ export async function syncFromSCM(): Promise<{ repos: number; developers: number
       
       try {
         console.log(`  Fetching changesets from: ${fullChangesetsUrl}`)
-        const changesetsData = await fetchJson(fullChangesetsUrl + '?limit=500', {
+        
+        // Use pagination to fetch all changesets within date range
+        for await (const cs of paginateChangesets(fullChangesetsUrl, {
           ...headers,
           'Accept': 'application/vnd.scmm-changesetCollection+json;v=2',
-        })
-        changesets = changesetsData?._embedded?.changesets || []
+        }, cutoffDate)) {
+          changesets.push(cs)
+        }
         
-        console.log(`  Found ${changesets.length} changesets`)
+        console.log(`  Found ${changesets.length} changesets in date range`)
         
         // Get most recent commit date (date is in milliseconds)
         if (changesets.length > 0) {
@@ -180,7 +292,7 @@ export async function syncFromSCM(): Promise<{ repos: number; developers: number
       for (const cs of changesets) {
         const authorName = cs.author?.name || 'Unknown'
         const authorEmail = cs.author?.mail || `${authorName.toLowerCase().replace(/\s+/g, '.')}@scm.local`
-        const developerId = authorName
+        const developerId = getCanonicalDeveloperId(authorName)
         
         // Insert developer
         if (!developerSet.has(developerId)) {
@@ -193,6 +305,27 @@ export async function syncFromSCM(): Promise<{ repos: number; developers: number
           developerSet.add(developerId)
         }
         
+        // Fetch diff to get line counts
+        let additions = 0
+        let deletions = 0
+        
+        // Try to fetch diff from changeset links
+        const csLinks = (cs as any)?._links
+        let diffUrl = csLinks?.diff?.href || csLinks?.patch?.href
+        
+        if (!diffUrl && cs.id) {
+          // Fallback: construct diff URL manually
+          diffUrl = `${cfg.baseUrl.replace(/\/$/, '')}/scm/api/v2/repositories/${namespace}/${repoName}/changesets/${cs.id}/diff`
+        }
+        
+        if (diffUrl) {
+          const fullDiffUrl = diffUrl.startsWith('http') ? diffUrl : cfg.baseUrl.replace(/\/$/, '') + diffUrl
+          const diffText = await fetchDiff(fullDiffUrl, headers)
+          const stats = countDiffStats(diffText)
+          additions = stats.added
+          deletions = stats.removed
+        }
+        
         // Insert commit
         const commitHash = cs.id
         const timestamp = cs.date ? new Date(cs.date).toISOString() : new Date().toISOString()
@@ -201,8 +334,8 @@ export async function syncFromSCM(): Promise<{ repos: number; developers: number
           hash: commitHash,
           message: cs.description || '',
           timestamp,
-          additions: 0,
-          deletions: 0,
+          additions,
+          deletions,
         })
         
         // Link repo, developer, and commit
@@ -213,6 +346,15 @@ export async function syncFromSCM(): Promise<{ repos: number; developers: number
   }
   
   // Save database after all inserts
+  saveDatabase()
+  
+  // Update sync metadata
+  setMetadata('last_sync_time', new Date().toISOString())
+  setMetadata('last_sync_stats', JSON.stringify({
+    repos: repos.length,
+    developers: developerSet.size,
+    commits: totalCommits,
+  }))
   saveDatabase()
   
   console.log('Sync complete:', {
