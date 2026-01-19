@@ -35,14 +35,12 @@ interface DeveloperViewProps {
 
 export function DeveloperView({ developer, metrics, taskMetrics, tasks, developers, onBack }: DeveloperViewProps) {
   const [apiMetrics, setApiMetrics] = useState<any>(null)
-  const [timePeriod, setTimePeriod] = useState<'day' | 'week' | 'month'>('week')
+  const [timePeriod, setTimePeriod] = useState<1 | 7 | 30 | 90 | 180 | 365>(90)
   
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const daysMap = { day: 1, week: 7, month: 30 }
-        const days = daysMap[timePeriod]
-        const res = await fetch(`http://localhost:3001/api/developers/${encodeURIComponent(developer.id)}/metrics?days=${days}`)
+        const res = await fetch(`http://localhost:3001/api/developers/${encodeURIComponent(developer.id)}/metrics?days=${timePeriod}`)
         const data = await res.json()
         setApiMetrics(data)
       } catch (err) {
@@ -94,31 +92,77 @@ export function DeveloperView({ developer, metrics, taskMetrics, tasks, develope
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
       >
-        <h3 className="text-xl font-bold mb-4">Git Activity Metrics</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold">Git Activity Metrics</h3>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={timePeriod === 1 ? 'default' : 'outline'}
+              onClick={() => setTimePeriod(1)}
+            >
+              1 Day
+            </Button>
+            <Button
+              size="sm"
+              variant={timePeriod === 7 ? 'default' : 'outline'}
+              onClick={() => setTimePeriod(7)}
+            >
+              7 Days
+            </Button>
+            <Button
+              size="sm"
+              variant={timePeriod === 30 ? 'default' : 'outline'}
+              onClick={() => setTimePeriod(30)}
+            >
+              30 Days
+            </Button>
+            <Button
+              size="sm"
+              variant={timePeriod === 90 ? 'default' : 'outline'}
+              onClick={() => setTimePeriod(90)}
+            >
+              90 Days
+            </Button>
+            <Button
+              size="sm"
+              variant={timePeriod === 180 ? 'default' : 'outline'}
+              onClick={() => setTimePeriod(180)}
+            >
+              180 Days
+            </Button>
+            <Button
+              size="sm"
+              variant={timePeriod === 365 ? 'default' : 'outline'}
+              onClick={() => setTimePeriod(365)}
+            >
+              1 Year
+            </Button>
+          </div>
+        </div>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Total Commits"
-          value={(apiMetrics?.totalCommits || metrics?.totalCommits || 0).toLocaleString()}
+          value={(apiMetrics?.totalCommits ?? 0).toLocaleString()}
           icon={<Code size={20} />}
           delay={0.1}
         />
         <MetricCard
           title="Pull Requests"
-          value={(apiMetrics?.pullRequests || metrics?.pullRequests || 0).toLocaleString()}
+          value={(apiMetrics?.pullRequests ?? 0).toLocaleString()}
           icon={<GitPullRequest size={20} />}
           delay={0.2}
         />
         <MetricCard
           title="Reviews Given"
-          value={(apiMetrics?.reviewsGiven || metrics?.reviewsGiven || 0).toLocaleString()}
+          value={(apiMetrics?.reviewsGiven ?? 0).toLocaleString()}
           icon={<Users size={20} />}
           delay={0.3}
         />
         <MetricCard
           title="Active Repos"
-          value={apiMetrics?.activeRepos || metrics?.activeRepos || 0}
+          value={apiMetrics?.activeRepos ?? 0}
           icon={<GitBranch size={20} />}
           delay={0.4}
         />
@@ -133,32 +177,7 @@ export function DeveloperView({ developer, metrics, taskMetrics, tasks, develope
         >
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Code Statistics</CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant={timePeriod === 'day' ? 'default' : 'outline'}
-                    onClick={() => setTimePeriod('day')}
-                  >
-                    1 Day
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={timePeriod === 'week' ? 'default' : 'outline'}
-                    onClick={() => setTimePeriod('week')}
-                  >
-                    1 Week
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={timePeriod === 'month' ? 'default' : 'outline'}
-                    onClick={() => setTimePeriod('month')}
-                  >
-                    1 Month
-                  </Button>
-                </div>
-              </div>
+              <CardTitle>Code Statistics</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -196,7 +215,7 @@ export function DeveloperView({ developer, metrics, taskMetrics, tasks, develope
             </CardHeader>
             <CardContent>
               <ActivityHeatmap 
-                data={(apiMetrics?.commitHistory || []).map((d: any) => ({ 
+                data={(apiMetrics?.heatmapData || []).map((d: any) => ({ 
                   date: d.date, 
                   count: d.commits,
                   repositories: d.repositories 
@@ -214,6 +233,42 @@ export function DeveloperView({ developer, metrics, taskMetrics, tasks, develope
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.7 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Commit Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CommitChart 
+              data={apiMetrics?.commitHistory || []}
+              showAdditions={false}
+            />
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.8 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Lines of Code Added</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CommitChart 
+              data={apiMetrics?.commitHistory || []}
+              showAdditions={true}
+            />
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.9 }}
       >
         <Card>
           <CardHeader>

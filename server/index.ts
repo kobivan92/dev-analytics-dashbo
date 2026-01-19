@@ -239,7 +239,71 @@ app.get('/api/developers/:id/metrics', (req, res) => {
         }
       : { activeRepos: 0, totalCommits: 0, linesAdded: 0, linesDeleted: 0 }
     
-    // Get heatmap data (always last 365 days)
+    // Get commit history data filtered by time period (for charts)
+    const commitHistoryResult = db.exec(`
+      SELECT 
+        date(c.timestamp) as date,
+        COUNT(*) as commits,
+        SUM(c.additions) as additions,
+        SUM(c.deletions) as deletions
+      FROM repo_commits rc
+      JOIN commits c ON rc.commit_hash = c.hash
+      WHERE rc.developer_id = ?
+        AND date(c.timestamp) >= date('now', '-' || ? || ' day')
+      GROUP BY date(c.timestamp)
+      ORDER BY date(c.timestamp)
+    `, [id, days])
+    
+    const commitHistory = commitHistoryResult[0]
+      ? commitHistoryResult[0].values.map((r: any) => ({
+          date: r[0],
+          commits: r[1],
+          additions: r[2] || 0,
+          deletions: r[3] || 0,
+        }))
+      : []
+    
+    // Get commit history with repository breakdown filtered by time period (for charts)
+    const commitHistoryByRepoResult = db.exec(`
+      SELECT 
+        date(c.timestamp) as date,
+        r.name as repository,
+        COUNT(*) as commits,
+        SUM(c.additions) as additions,
+        SUM(c.deletions) as deletions
+      FROM repo_commits rc
+      JOIN commits c ON rc.commit_hash = c.hash
+      JOIN repositories r ON rc.repo_id = r.id
+      WHERE rc.developer_id = ?
+        AND date(c.timestamp) >= date('now', '-' || ? || ' day')
+      GROUP BY date(c.timestamp), r.name
+      ORDER BY date(c.timestamp), r.name
+    `, [id, days])
+    
+    // Build repository breakdown map for charts
+    const commitHistoryByRepo = new Map<string, any[]>()
+    if (commitHistoryByRepoResult[0]) {
+      commitHistoryByRepoResult[0].values.forEach((r: any) => {
+        const date = r[0]
+        const repo = r[1]
+        const commits = r[2]
+        const additions = r[3] || 0
+        const deletions = r[4] || 0
+        
+        if (!commitHistoryByRepo.has(date)) {
+          commitHistoryByRepo.set(date, [])
+        }
+        commitHistoryByRepo.get(date)!.push({ name: repo, commits, additions, deletions })
+      })
+    }
+    
+    // Enhance commitHistory with repository data
+    const commitHistoryEnhanced = commitHistory.map(day => ({
+      ...day,
+      repositories: commitHistoryByRepo.get(day.date) || []
+    }))
+    
+    // Get heatmap data (always last 365 days, independent of filter)
     const heatmapResult = db.exec(`
       SELECT 
         date(c.timestamp) as date,
@@ -254,7 +318,7 @@ app.get('/api/developers/:id/metrics', (req, res) => {
       ORDER BY date(c.timestamp)
     `, [id])
     
-    const commitHistory = heatmapResult[0]
+    const heatmapData = heatmapResult[0]
       ? heatmapResult[0].values.map((r: any) => ({
           date: r[0],
           commits: r[1],
@@ -263,7 +327,7 @@ app.get('/api/developers/:id/metrics', (req, res) => {
         }))
       : []
     
-    // Get heatmap data with repository breakdown
+    // Get heatmap data with repository breakdown (always last 365 days)
     const heatmapByRepoResult = db.exec(`
       SELECT 
         date(c.timestamp) as date,
@@ -280,7 +344,7 @@ app.get('/api/developers/:id/metrics', (req, res) => {
       ORDER BY date(c.timestamp), r.name
     `, [id])
     
-    // Build repository breakdown map
+    // Build repository breakdown map for heatmap
     const heatmapByRepo = new Map<string, any[]>()
     if (heatmapByRepoResult[0]) {
       heatmapByRepoResult[0].values.forEach((r: any) => {
@@ -297,8 +361,8 @@ app.get('/api/developers/:id/metrics', (req, res) => {
       })
     }
     
-    // Enhance commitHistory with repository data
-    const commitHistoryEnhanced = commitHistory.map(day => ({
+    // Enhance heatmap data with repository data
+    const heatmapDataEnhanced = heatmapData.map(day => ({
       ...day,
       repositories: heatmapByRepo.get(day.date) || []
     }))
@@ -374,6 +438,7 @@ app.get('/api/developers/:id/metrics', (req, res) => {
       pullRequests: 0,
       reviewsGiven: 0,
       commitHistory: commitHistoryEnhanced,
+      heatmapData: heatmapDataEnhanced,
       monthlyActivity,
       languageBreakdown: [],
       weekdayActivity,

@@ -32,13 +32,19 @@ export function TeamDashboard({ teamMetrics, teamTaskMetrics, developers, devMet
   const [commitActivityData, setCommitActivityData] = useState<{ date: string; commits: number }[]>([])
   const [showAllContributors, setShowAllContributors] = useState<boolean>(false)
   const [contributorSortBy, setContributorSortBy] = useState<'commits' | 'name'>('commits')
-  const [selectedDevelopers, setSelectedDevelopers] = useState<Set<string>>(new Set(developers.map(d => d.id)))
-
+  
   const currentTeamMembers = ['grammaton88', 'kobivan', 'Ilia', 'Ilia Lomsadze', 'abezhitashvili', 'gchutlashvili', 'vumpy']
+  
+  // Initialize with current team members only
+  const [selectedDevelopers, setSelectedDevelopers] = useState<Set<string>>(() => {
+    const currentTeamIds = developers.filter(d => currentTeamMembers.includes(d.id)).map(d => d.id)
+    return new Set(currentTeamIds)
+  })
 
-  // Update selected developers when developers list changes
+  // Update selected developers to current team when developers list changes
   useEffect(() => {
-    setSelectedDevelopers(new Set(developers.map(d => d.id)))
+    const currentTeamIds = developers.filter(d => currentTeamMembers.includes(d.id)).map(d => d.id)
+    setSelectedDevelopers(new Set(currentTeamIds))
   }, [developers])
 
   useEffect(() => {
